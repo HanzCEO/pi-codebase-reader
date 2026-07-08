@@ -1,0 +1,45 @@
+{
+  "name": "pi-codebase-reader",
+  "version": "0.1.0",
+  "description": "Smart codebase reader for pi — AST-based file outlines + explorer subagent for @tintinweb/pi-subagents",
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/HanzCEO/pi-codebase-reader.git"
+  },
+  "keywords": [
+    "pi-package",
+    "pi",
+    "pi-extension",
+    "codebase-reader",
+    "subagent",
+    "code-exploration"
+  ],
+  "peerDependencies": {
+    "@earendil-works/pi-ai": ">=0.70.0",
+    "@earendil-works/pi-coding-agent": ">=0.70.0",
+    "@earendil-works/pi-tui": ">=0.70.0"
+  },
+  "dependencies": {
+    "@sinclair/typebox": "^0.34.49",
+    "smol-toml": "^1.7.0",
+    "web-tree-sitter": "^0.26.10",
+    "tree-sitter-python": "^0.25.0",
+    "tree-sitter-go": "^0.25.0",
+    "tree-sitter-rust": "^0.24.0",
+    "tree-sitter-javascript": "^0.25.0",
+    "tree-sitter-typescript": "^0.23.2"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "typescript": "^6.0.0"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "pi": {
+    "extensions": ["./src/index.ts"]
+  }
+}
