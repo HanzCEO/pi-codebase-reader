@@ -42,37 +42,60 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
   // ---- /codebase-reader [on|off] ----
 
   pi.registerCommand("codebase-reader", {
-    description: "Enable or disable smart codebase reading. Usage: /codebase-reader [on|off]",
+    description:
+      "Enable or disable smart codebase reading. " +
+      "Usage: /codebase-reader [on|off] [local|global]. " +
+      "Defaults to global (~/.pi/agent/codebase-reader.toml).",
     handler: async (args, ctx) => {
       ensureGlobalConfig();
-      const arg = args?.trim().toLowerCase();
       const cwd = ctx.cwd;
+      const argStr = args?.trim().toLowerCase() || "";
+      const parts = argStr.split(/\s+/);
+      const action = parts[0];
+      const scopeArg = parts[1];
+      let scope: ConfigScope = "global";
 
-      if (arg === "on") {
+      if (scopeArg === "local") {
+        scope = "project";
+      } else if (scopeArg && scopeArg !== "global") {
+        ctx.ui.notify(
+          `Unknown scope "${scopeArg}". Use "local" or "global", or omit for global default.`,
+          "error",
+        );
+        return;
+      }
+
+      if (action === "on") {
         const config = deps.getConfig();
         config.general.enabled = true;
-        saveConfig(cwd, config);
+        saveConfig(cwd, config, scope);
         deps.setEnabled(true);
         deps.reloadConfig();
+        const location = scope === "project" ? "local" : "global";
         ctx.ui.notify(
-          `${ctx.ui.theme.fg("success", "✓")} Codebase Reader enabled — large files now return AST outlines`,
+          `${ctx.ui.theme.fg("success", "✓")} Codebase Reader enabled (${location}) — large files now return AST outlines`,
           "info",
         );
-      } else if (arg === "off") {
+      } else if (action === "off") {
         const config = deps.getConfig();
         config.general.enabled = false;
-        saveConfig(cwd, config);
+        saveConfig(cwd, config, scope);
         deps.setEnabled(false);
         deps.reloadConfig();
+        const location = scope === "project" ? "local" : "global";
         ctx.ui.notify(
-          `${ctx.ui.theme.fg("warning", "○")} Codebase Reader disabled — files return full content`,
+          `${ctx.ui.theme.fg("warning", "○")} Codebase Reader disabled (${location}) — files return full content`,
           "info",
         );
       } else {
         const status = deps.isEnabled() ? "on" : "off";
+        const hint = scopeArg
+          ? ` (${scopeArg})`
+          : "";
         ctx.ui.notify(
-          `Codebase Reader is currently ${ctx.ui.theme.fg(deps.isEnabled() ? "success" : "warning", status)}` +
-          `\nUse ${ctx.ui.theme.fg("accent", "/codebase-reader on")} to enable or ${ctx.ui.theme.fg("accent", "/codebase-reader off")} to disable`,
+          `Codebase Reader is currently ${ctx.ui.theme.fg(deps.isEnabled() ? "success" : "warning", status)}${hint}` +
+          `\nUse ${ctx.ui.theme.fg("accent", "/codebase-reader on")} to enable or ${ctx.ui.theme.fg("accent", "/codebase-reader off")} to disable` +
+          `\nAppend ${ctx.ui.theme.fg("accent", "local")} or ${ctx.ui.theme.fg("accent", "global")} to target a specific scope (default: global)`,
           "info",
         );
       }
@@ -82,10 +105,28 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
   // ---- /codebase-reader-model ----
 
   pi.registerCommand("codebase-reader-model", {
-    description: "Select the model used by the Explorer subagent",
-    handler: async (_args, ctx) => {
+    description:
+      "Select the model used by the Explorer subagent. " +
+      "Usage: /codebase-reader-model [local|global]. " +
+      "Defaults to global (~/.pi/agent/codebase-reader.toml).",
+    handler: async (args, ctx) => {
       ensureGlobalConfig();
       const cwd = ctx.cwd;
+
+      // Parse scope argument
+      const arg = args?.trim().toLowerCase();
+      let scope: ConfigScope;
+      if (arg === "local") {
+        scope = "project";
+      } else if (arg === "global" || !arg) {
+        scope = "global";
+      } else {
+        ctx.ui.notify(
+          `Unknown argument "${arg}". Use "global" or "local", or omit for global default.`,
+          "error",
+        );
+        return;
+      }
 
       // Get available models from the registry
       const registry = ctx.modelRegistry;
@@ -221,7 +262,7 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
       // Save to config
       const config = loadConfig(cwd);
       config.explorer.model = selected;
-      saveConfig(cwd, config);
+      saveConfig(cwd, config, scope);
       deps.reloadConfig();
 
       // Update the explorer.md agent file
@@ -231,8 +272,9 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
         maxTurns: config.explorer.max_turns,
       });
 
+      const location = scope === "project" ? "local" : "global";
       ctx.ui.notify(
-        `${ctx.ui.theme.fg("success", "✓")} Explorer model set to ${ctx.ui.theme.fg("accent", selected)}`,
+        `${ctx.ui.theme.fg("success", "✓")} Explorer model set to ${ctx.ui.theme.fg("accent", selected)} (${location})`,
         "info",
       );
     },

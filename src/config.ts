@@ -98,9 +98,9 @@ export function loadConfig(cwd: string): CodebaseReaderConfig {
   }
 }
 
-/** Save the config to file (always writes to project path). */
-export function saveConfig(cwd: string, config: CodebaseReaderConfig): void {
-  const projectPath = join(cwd, CONFIG_DIR_NAME, CONFIG_FILENAME);
+/** Save the config to file. Defaults to global scope (~/.pi/agent/). */
+export function saveConfig(cwd: string, config: CodebaseReaderConfig, scope: ConfigScope = "global"): void {
+  const { path, isProject } = resolveConfigPath(cwd, scope);
 
   const obj = {
     general: {
@@ -119,11 +119,12 @@ export function saveConfig(cwd: string, config: CodebaseReaderConfig): void {
   };
 
   try {
-    mkdirSync(dirname(projectPath), { recursive: true });
-    writeFileSync(projectPath, stringifyToml(obj), "utf-8");
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, stringifyToml(obj), "utf-8");
   } catch (err) {
+    const label = isProject ? "project" : "global";
     console.warn(
-      `[codebase-reader] Failed to save config to ${projectPath}:`,
+      `[codebase-reader] Failed to save config to ${label} path ${path}:`,
       err instanceof Error ? err.message : String(err),
     );
   }

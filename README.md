@@ -31,8 +31,8 @@ The outline shows every structural symbol — classes, functions, methods, inter
 
 | Command | Description |
 |---------|-------------|
-| `/codebase-reader [on\|off]` | Enable or disable smart file outlining (bare command shows current status) |
-| `/codebase-reader-model` | Open an interactive searchable model selector for the Explorer subagent |
+| `/codebase-reader [on\|off] [local\|global]` | Enable or disable smart file outlining (bare command shows current status). Default scope: global |
+| `/codebase-reader-model [local\|global]` | Open an interactive searchable model selector for the Explorer subagent. Default scope: global |
 | `/codebase-reader-settings [global\|local]` | Edit the TOML configuration file (default: global; use `local` for project-level `.pi/codebase-reader.toml`) |
 
 ## Installation
