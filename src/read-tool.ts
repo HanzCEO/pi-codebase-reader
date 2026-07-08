@@ -15,6 +15,7 @@ import { join, resolve } from "node:path";
 import { Type } from "@sinclair/typebox";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { estimateCodeTokens, formatTokenCount } from "./token-estimate.js";
+import { suggestSimilarPaths } from "./fuzzy-suggest.js";
 import { generateOutline } from "./outline.js";
 import { detectLanguage, parseSourceFile } from "./parsers/index.js";
 import type { CodebaseReaderConfig } from "./types.js";
@@ -71,7 +72,15 @@ export function registerReadTool(pi: ExtensionAPI, deps: SmartReadDeps): void {
       const resolvedPath = resolvePath(filePath, ctx.cwd);
 
       if (!resolvedPath || !existsSync(resolvedPath)) {
-        return textResult(`File not found: ${filePath}`);
+        const doSuggest = config.general.suggest_similar !== false;
+        const suggestions = doSuggest
+          ? suggestSimilarPaths(resolvedPath, filePath)
+          : [];
+        let msg = `File not found: ${filePath}`;
+        if (suggestions.length > 0) {
+          msg += `\n\nDid you mean?\n${suggestions.map((s) => `  ${s.display}`).join("\n")}`;
+        }
+        return textResult(msg);
       }
 
       // If path is a directory, list its contents

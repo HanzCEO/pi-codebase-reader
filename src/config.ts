@@ -49,6 +49,9 @@ export function loadConfig(cwd: string): CodebaseReaderConfig {
         threshold_tokens:
           (parsed.general as Record<string, unknown>)?.threshold_tokens as number ??
           DEFAULT_CONFIG.general.threshold_tokens,
+        suggest_similar:
+          (parsed.general as Record<string, unknown>)?.suggest_similar as boolean ??
+          DEFAULT_CONFIG.general.suggest_similar,
       },
       explorer: {
         model:
@@ -86,6 +89,7 @@ export function saveConfig(cwd: string, config: CodebaseReaderConfig): void {
     general: {
       enabled: config.general.enabled,
       threshold_tokens: config.general.threshold_tokens,
+      suggest_similar: config.general.suggest_similar,
     },
     explorer: {
       model: config.explorer.model,
@@ -116,7 +120,7 @@ export function getConfigRaw(cwd: string): string {
   }
   // Return formatted defaults
   return stringifyToml({
-    general: { enabled: true, threshold_tokens: 10_000 },
+    general: { enabled: true, threshold_tokens: 10_000, suggest_similar: true },
     explorer: {
       model: "anthropic/claude-sonnet-4-20250514",
       thinking: "medium",

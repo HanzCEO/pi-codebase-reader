@@ -18,6 +18,7 @@ export interface CodebaseReaderConfig {
   general: {
     enabled: boolean;
     threshold_tokens: number;
+    suggest_similar: boolean;
   };
   explorer: {
     model: string;
@@ -33,6 +34,7 @@ export const DEFAULT_CONFIG: CodebaseReaderConfig = {
   general: {
     enabled: true,
     threshold_tokens: 10_000,
+    suggest_similar: true,
   },
   explorer: {
     model: "anthropic/claude-sonnet-4-20250514",
