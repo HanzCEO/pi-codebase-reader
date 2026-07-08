@@ -129,6 +129,89 @@ export function saveConfig(cwd: string, config: CodebaseReaderConfig): void {
   }
 }
 
+/**
+ * Deep-merge a single section's defaults into a parsed TOML object.
+ * Only adds keys that are missing — never overwrites existing user values.
+ * Returns true if any keys were added.
+ */
+function mergeSectionDefaults(
+  parsed: Record<string, unknown>,
+  section: string,
+  defaults: Record<string, unknown>,
+): boolean {
+  const existing = parsed[section];
+  if (!existing || typeof existing !== "object") {
+    // Entire section is missing — add all defaults
+    parsed[section] = { ...defaults };
+    return true;
+  }
+
+  const sectionObj = existing as Record<string, unknown>;
+  let changed = false;
+  for (const [key, value] of Object.entries(defaults)) {
+    if (!(key in sectionObj)) {
+      sectionObj[key] = value;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+/** Configuration sections and their defaults for merge lookups. */
+const CONFIG_SECTIONS: Record<string, Record<string, unknown>> = {
+  general: DEFAULT_CONFIG.general as unknown as Record<string, unknown>,
+  explorer: DEFAULT_CONFIG.explorer as unknown as Record<string, unknown>,
+  parsing: DEFAULT_CONFIG.parsing as unknown as Record<string, unknown>,
+};
+
+/**
+ * Ensure the global TOML config file at ~/.pi/agent/codebase-reader.toml
+ * contains all default keys. Creates the file from scratch if missing;
+ * otherwise reads it and merges in any missing default keys, preserving
+ * any user-defined values already on disk.
+ */
+export function ensureGlobalConfig(): void {
+  const globalPath = join(getAgentDir(), CONFIG_FILENAME);
+
+  // No file at all — create from scratch with full defaults
+  if (!existsSync(globalPath)) {
+    try {
+      mkdirSync(getAgentDir(), { recursive: true });
+      writeFileSync(globalPath, stringifyToml(DEFAULT_CONFIG), "utf-8");
+    } catch (err) {
+      console.warn(
+        `[codebase-reader] Failed to create global config at ${globalPath}:`,
+        err instanceof Error ? err.message : String(err),
+      );
+    }
+    return;
+  }
+
+  // File exists — merge any missing default keys
+  try {
+    const raw = readFileSync(globalPath, "utf-8");
+    const parsed = parseToml(raw) as Record<string, unknown>;
+
+    let needsWrite = false;
+    for (const [section, defaults] of Object.entries(CONFIG_SECTIONS)) {
+      if (mergeSectionDefaults(parsed, section, defaults)) {
+        needsWrite = true;
+      }
+    }
+
+    if (needsWrite) {
+      writeFileSync(globalPath, stringifyToml(parsed), "utf-8");
+    }
+  } catch (err) {
+    // Malformed TOML — don't touch the user's file, just warn.
+    // loadConfig() already handles this gracefully by returning in-memory defaults.
+    console.warn(
+      `[codebase-reader] Global config at ${globalPath} has invalid TOML, leaving untouched:`,
+      err instanceof Error ? err.message : String(err),
+    );
+  }
+}
+
 /** Get the config TOML as a raw string (for editing). */
 export function getConfigRaw(cwd: string, scope?: ConfigScope): string {
   const { path } = resolveConfigPath(cwd, scope);

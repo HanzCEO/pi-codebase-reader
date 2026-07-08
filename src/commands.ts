@@ -22,6 +22,7 @@ import {
 } from "@earendil-works/pi-tui";
 import {
   type ConfigScope,
+  ensureGlobalConfig,
   getConfigRaw,
   loadConfig,
   saveConfig,
@@ -43,6 +44,7 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
   pi.registerCommand("codebase-reader", {
     description: "Enable or disable smart codebase reading. Usage: /codebase-reader [on|off]",
     handler: async (args, ctx) => {
+      ensureGlobalConfig();
       const arg = args?.trim().toLowerCase();
       const cwd = ctx.cwd;
 
@@ -82,6 +84,7 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
   pi.registerCommand("codebase-reader-model", {
     description: "Select the model used by the Explorer subagent",
     handler: async (_args, ctx) => {
+      ensureGlobalConfig();
       const cwd = ctx.cwd;
 
       // Get available models from the registry
@@ -243,6 +246,7 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
       "Usage: /codebase-reader-settings [global|local]. " +
       "Defaults to global (~/.pi/agent/codebase-reader.toml).",
     handler: async (args, ctx) => {
+      ensureGlobalConfig();
       const cwd = ctx.cwd;
       const arg = args?.trim().toLowerCase();
       let scope: ConfigScope;
