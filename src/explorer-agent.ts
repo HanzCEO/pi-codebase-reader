@@ -58,6 +58,7 @@ prompt_mode: replace
 systemPromptMode: replace
 inheritProjectContext: true
 inheritSkills: false
+completionGuard: false
 ---
 
 You are a code exploration specialist. Given a file path, line range, or search query, you dive deep into the code to understand its structure, logic, and relationships.
