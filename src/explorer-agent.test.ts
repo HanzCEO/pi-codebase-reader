@@ -17,7 +17,10 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import {
   ensureExplorerAgent,
   updateExplorerAgent,
-  isSubagentsAvailable,
+  isTintinwebSubagentsAvailable,
+  isNicobailonSubagentsAvailable,
+  detectSubagentLibrary,
+  formatSubagentLibrary,
 } from "./explorer-agent.js";
 
 describe("explorer-agent", () => {
@@ -45,7 +48,39 @@ describe("explorer-agent", () => {
 
       const content = readFileSync(resultPath!, "utf-8");
 
-      // YAML frontmatter
+      // Fields for @tintinweb/pi-subagents
+      assert.ok(
+        content.includes("display_name: Explorer"),
+        "frontmatter should contain display_name",
+      );
+      assert.ok(
+        content.includes("max_turns: 50"),
+        "frontmatter should contain max_turns",
+      );
+      assert.ok(
+        content.includes("prompt_mode: replace"),
+        "frontmatter should contain prompt_mode",
+      );
+
+      // Fields for nicobailon/pi-subagents
+      assert.ok(
+        content.includes("name: explorer"),
+        "frontmatter should contain name",
+      );
+      assert.ok(
+        content.includes("systemPromptMode: replace"),
+        "frontmatter should contain systemPromptMode",
+      );
+      assert.ok(
+        content.includes("inheritProjectContext: true"),
+        "frontmatter should contain inheritProjectContext",
+      );
+      assert.ok(
+        content.includes("inheritSkills: false"),
+        "frontmatter should contain inheritSkills",
+      );
+
+      // Common fields
       assert.ok(
         content.includes("model: test-model"),
         "frontmatter should contain model",
@@ -53,14 +88,6 @@ describe("explorer-agent", () => {
       assert.ok(
         content.includes("thinking: high"),
         "frontmatter should contain thinking",
-      );
-      assert.ok(
-        content.includes("max_turns: 50"),
-        "frontmatter should contain max_turns",
-      );
-      assert.ok(
-        content.includes("display_name: Explorer"),
-        "frontmatter should contain display_name",
       );
       assert.ok(
         content.includes("description:"),
@@ -139,15 +166,15 @@ describe("explorer-agent", () => {
     });
   });
 
-  // ── isSubagentsAvailable ────────────────────────────────────────────
+  // ── isTintinwebSubagentsAvailable ──────────────────────────────────
 
-  describe("isSubagentsAvailable", () => {
+  describe("isTintinwebSubagentsAvailable", () => {
     it("returns false when the subagents symbol is not set", () => {
       const subagentsKey = Symbol.for("pi-subagents:manager");
       const previous = (globalThis as any)[subagentsKey];
       delete (globalThis as any)[subagentsKey];
 
-      const result = isSubagentsAvailable();
+      const result = isTintinwebSubagentsAvailable();
       assert.equal(result, false, "should be false when symbol is absent");
 
       // Restore
@@ -159,7 +186,7 @@ describe("explorer-agent", () => {
 
       (globalThis as any)[subagentsKey] = { version: "1.0.0" };
 
-      const result = isSubagentsAvailable();
+      const result = isTintinwebSubagentsAvailable();
       assert.equal(result, true, "should be true when symbol is present");
 
       // Clean up
@@ -171,10 +198,137 @@ describe("explorer-agent", () => {
 
       (globalThis as any)[subagentsKey] = undefined;
 
-      const result = isSubagentsAvailable();
+      const result = isTintinwebSubagentsAvailable();
       assert.equal(result, false, "undefined is not available");
 
       delete (globalThis as any)[subagentsKey];
+    });
+  });
+
+  // ── isNicobailonSubagentsAvailable ─────────────────────────────────
+
+  describe("isNicobailonSubagentsAvailable", () => {
+    it("returns false when the runtime key is not set", () => {
+      const key = "__piSubagentRuntimeCleanup";
+      const previous = (globalThis as any)[key];
+      delete (globalThis as any)[key];
+
+      const result = isNicobailonSubagentsAvailable();
+      assert.equal(result, false, "should be false when key is absent");
+
+      // Restore
+      (globalThis as any)[key] = previous;
+    });
+
+    it("returns false when the runtime key is set to a non-function", () => {
+      const key = "__piSubagentRuntimeCleanup";
+
+      (globalThis as any)[key] = { version: "1.0.0" };
+
+      const result = isNicobailonSubagentsAvailable();
+      assert.equal(result, false, "should be false when key is not a function");
+
+      delete (globalThis as any)[key];
+    });
+
+    it("returns true when the runtime key is set to a function", () => {
+      const key = "__piSubagentRuntimeCleanup";
+
+      (globalThis as any)[key] = () => {};
+
+      const result = isNicobailonSubagentsAvailable();
+      assert.equal(result, true, "should be true when key is a function");
+
+      delete (globalThis as any)[key];
+    });
+  });
+
+  // ── detectSubagentLibrary ──────────────────────────────────────────
+
+  describe("detectSubagentLibrary", () => {
+    it("returns '@tintinweb/pi-subagents' when tintinweb symbol is set", () => {
+      const symbolKey = Symbol.for("pi-subagents:manager");
+      const nicobailonKey = "__piSubagentRuntimeCleanup";
+
+      // Set tintinweb, clear nicobailon
+      (globalThis as any)[symbolKey] = { version: "1.0.0" };
+      const prevNico = (globalThis as any)[nicobailonKey];
+      delete (globalThis as any)[nicobailonKey];
+
+      const result = detectSubagentLibrary();
+      assert.equal(result, "@tintinweb/pi-subagents");
+
+      delete (globalThis as any)[symbolKey];
+      (globalThis as any)[nicobailonKey] = prevNico;
+    });
+
+    it("returns 'pi-subagents' when nicobailon runtime key is a function", () => {
+      const symbolKey = Symbol.for("pi-subagents:manager");
+      const nicobailonKey = "__piSubagentRuntimeCleanup";
+
+      // Clear tintinweb, set nicobailon
+      const prevSym = (globalThis as any)[symbolKey];
+      delete (globalThis as any)[symbolKey];
+      (globalThis as any)[nicobailonKey] = () => {};
+
+      const result = detectSubagentLibrary();
+      assert.equal(result, "pi-subagents");
+
+      (globalThis as any)[symbolKey] = prevSym;
+      delete (globalThis as any)[nicobailonKey];
+    });
+
+    it("returns null when neither library is detected", () => {
+      const symbolKey = Symbol.for("pi-subagents:manager");
+      const nicobailonKey = "__piSubagentRuntimeCleanup";
+
+      const prevSym = (globalThis as any)[symbolKey];
+      const prevNico = (globalThis as any)[nicobailonKey];
+      delete (globalThis as any)[symbolKey];
+      delete (globalThis as any)[nicobailonKey];
+
+      const result = detectSubagentLibrary();
+      assert.equal(result, null);
+
+      (globalThis as any)[symbolKey] = prevSym;
+      (globalThis as any)[nicobailonKey] = prevNico;
+    });
+
+    it("prioritizes tintinweb over nicobailon when both are detected", () => {
+      const symbolKey = Symbol.for("pi-subagents:manager");
+      const nicobailonKey = "__piSubagentRuntimeCleanup";
+
+      (globalThis as any)[symbolKey] = { version: "1.0.0" };
+      (globalThis as any)[nicobailonKey] = () => {};
+
+      const result = detectSubagentLibrary();
+      assert.equal(result, "@tintinweb/pi-subagents",
+        "should prefer tintinweb when both are present");
+
+      delete (globalThis as any)[symbolKey];
+      delete (globalThis as any)[nicobailonKey];
+    });
+  });
+
+  // ── formatSubagentLibrary ──────────────────────────────────────────
+
+  describe("formatSubagentLibrary", () => {
+    it("formats '@tintinweb/pi-subagents' correctly", () => {
+      assert.equal(
+        formatSubagentLibrary("@tintinweb/pi-subagents"),
+        "@tintinweb/pi-subagents",
+      );
+    });
+
+    it("formats 'pi-subagents' correctly", () => {
+      assert.equal(
+        formatSubagentLibrary("pi-subagents"),
+        "pi-subagents (nicobailon)",
+      );
+    });
+
+    it("formats null as 'none'", () => {
+      assert.equal(formatSubagentLibrary(null), "none");
     });
   });
 });

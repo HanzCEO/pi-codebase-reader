@@ -3,13 +3,19 @@
  *
  * Overrides the built-in `read` tool to return structural outlines for large
  * files in supported languages (TypeScript, JavaScript, Python, Go, Rust).
- * Registers the `explorer` subagent with @tintinweb/pi-subagents for deep-dive
- * code exploration.
+ * Registers the `explorer` subagent for use with EITHER
+ * `@tintinweb/pi-subagents` OR `nicobailon/pi-subagents`.
+ *
+ * Users install their preferred subagent library:
+ *   pi install npm:@tintinweb/pi-subagents
+ *   — or —
+ *   pi install npm:pi-subagents
  *
  * Commands:
- *   /codebase-reader [on|off]
- *   /codebase-reader-model
- *   /codebase-reader-settings
+ *   /codebase-reader [on|off] [local|global]
+ *   /codebase-reader-model [local|global]
+ *   /codebase-reader-settings [global|local]
+ *   /codebase-reader-subagent [local|global]
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
@@ -17,7 +23,11 @@ import { registerCommands } from "./commands.js";
 import { loadConfig, saveConfig } from "./config.js";
 import {
   ensureExplorerAgent,
-  isSubagentsAvailable,
+  isTintinwebSubagentsAvailable,
+  isNicobailonSubagentsAvailable,
+  detectSubagentLibrary,
+  formatSubagentLibrary,
+  type SubagentLibrary,
 } from "./explorer-agent.js";
 import { registerReadTool } from "./read-tool.js";
 import type { CodebaseReaderConfig } from "./types.js";
@@ -59,12 +69,31 @@ export default function (pi: ExtensionAPI) {
     );
   }
 
-  // Check for pi-subagents
-  if (isSubagentsAvailable()) {
-    console.warn("[codebase-reader] pi-subagents detected — Explorer agent available");
-  } else {
+  // ---- Detect subagent libraries ----
+  const tintinwebAvailable = isTintinwebSubagentsAvailable();
+  const nicobailonAvailable = isNicobailonSubagentsAvailable();
+  const detectedLib = config.subagent?.library
+    ? (config.subagent.library as SubagentLibrary)
+    : detectSubagentLibrary();
+
+  if (tintinwebAvailable) {
     console.warn(
-      "[codebase-reader] pi-subagents not detected. Install with: pi install npm:@tintinweb/pi-subagents",
+      "[codebase-reader] @tintinweb/pi-subagents detected — Explorer agent available via Agent tool",
+    );
+  } else if (nicobailonAvailable) {
+    console.warn(
+      "[codebase-reader] pi-subagents (nicobailon) detected — Explorer agent available via subagent tool",
+    );
+  } else {
+    const hint = config.subagent?.library
+      ? ` (configured: ${config.subagent.library})`
+      : "";
+    console.warn(
+      `[codebase-reader] No subagent library detected${hint}. ` +
+      `Install one:\n` +
+      `  pi install npm:@tintinweb/pi-subagents\n` +
+      `  — or —\n` +
+      `  pi install npm:pi-subagents`,
     );
   }
 
@@ -84,14 +113,25 @@ export default function (pi: ExtensionAPI) {
 
   // Re-check subagents on session start (they may have been loaded after us)
   pi.on("session_start", async () => {
-    if (isSubagentsAvailable()) {
-      console.warn("[codebase-reader] pi-subagents available — Explorer agent ready");
+    const tintinweb = isTintinwebSubagentsAvailable();
+    const nicobailon = isNicobailonSubagentsAvailable();
+
+    if (tintinweb) {
+      console.warn(
+        "[codebase-reader] @tintinweb/pi-subagents available — Explorer agent ready",
+      );
+    } else if (nicobailon) {
+      console.warn(
+        "[codebase-reader] pi-subagents (nicobailon) available — Explorer agent ready",
+      );
     }
   });
 
-  // ---- pi-subagents readiness ----
+  // ---- @tintinweb/pi-subagents readiness event ----
   pi.events.on("subagents:ready", () => {
-    console.warn("[codebase-reader] pi-subagents ready — Explorer agent ready");
+    console.warn(
+      "[codebase-reader] @tintinweb/pi-subagents ready — Explorer agent ready",
+    );
   });
 
   // ---- Register the smart read tool ----

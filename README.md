@@ -33,6 +33,7 @@ The outline shows every structural symbol — classes, functions, methods, inter
 |---------|-------------|
 | `/codebase-reader [on\|off] [local\|global]` | Enable or disable smart file outlining (bare command shows current status). Default scope: global |
 | `/codebase-reader-model [local\|global]` | Open an interactive searchable model selector for the Explorer subagent. Default scope: global |
+| `/codebase-reader-subagent [library\|auto] [local\|global]` | Show subagent library status or configure preference (`@tintinweb/pi-subagents`, `pi-subagents`, or `auto`). Default scope: global |
 | `/codebase-reader-settings [global\|local]` | Edit the TOML configuration file (default: global; use `local` for project-level `.pi/codebase-reader.toml`) |
 
 ## Installation
@@ -47,11 +48,19 @@ Or load directly for development:
 pi -e ./src/index.ts
 ```
 
-Requires `@tintinweb/pi-subagents` for subagent support:
+### Choose your subagent library
+
+The Explorer subagent works with **either** subagent extension. Install one (or both):
 
 ```bash
+# Option A — @tintinweb/pi-subagents
 pi install npm:@tintinweb/pi-subagents
+
+# Option B — nicobailon/pi-subagents
+pi install npm:pi-subagents
 ```
+
+Both libraries are supported simultaneously — the agent definition file is written in a format compatible with both. Use `/codebase-reader-subagent` to check which is detected.
 
 ## Configuration
 
@@ -86,7 +95,10 @@ max_outline_depth = 10
 
 ## Explorer Subagent
 
-The extension registers an `explorer` agent type with `@tintinweb/pi-subagents`. Use it via the `Agent` tool:
+The extension registers an `explorer` agent type compatible with **both** subagent libraries.
+
+### With @tintinweb/pi-subagents
+Use the `Agent` tool:
 
 ```
 Agent({
@@ -96,9 +108,23 @@ Agent({
 })
 ```
 
+### With nicobailon/pi-subagents
+Use the `subagent` tool:
+
+```
+subagent({
+  agent: "explorer",
+  task: "Analyze the request handler in src/server.ts lines 120-350"
+})
+```
+
 The explorer subagent has tools `read`, `grep`, `find`, `bash`, `ls` and is specialized for deep-dive code exploration.
 
-When you change the model via `/codebase-reader-model` or settings via `/codebase-reader-settings`, the explorer agent definition file is automatically updated so pi-subagents picks up the changes on next reload.
+When you change the model via `/codebase-reader-model` or settings via `/codebase-reader-settings`, the explorer agent definition file is automatically updated so the subagent library picks up the changes on next reload.
+
+### Checking your subagent setup
+
+Use `/codebase-reader-subagent` (without arguments) to see which library is detected and active:
 
 ## How Outlining Works
 
@@ -138,6 +164,7 @@ The `/codebase-reader-model` command opens a fully interactive terminal UI that:
 The extension hooks into pi's session lifecycle:
 - **`session_start`**: Reloads configuration and re-registers the Explorer agent for each new session
 - **`subagents:ready`**: Listens for the `@tintinweb/pi-subagents` readiness signal to confirm the Explorer agent is available
+- **Auto-detection**: Both `@tintinweb/pi-subagents` (via Symbol) and `pi-subagents` (via globalThis runtime key) are detected automatically on session start
 
 ## Continuous Integration
 

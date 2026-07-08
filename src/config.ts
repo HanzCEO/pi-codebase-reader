@@ -58,33 +58,43 @@ export function loadConfig(cwd: string): CodebaseReaderConfig {
     const raw = readFileSync(path, "utf-8");
     const parsed = parseToml(raw) as Record<string, unknown>;
 
+    const generalSection = parsed.general as Record<string, unknown> | undefined;
+    const explorerSection = parsed.explorer as Record<string, unknown> | undefined;
+    const parsingSection = parsed.parsing as Record<string, unknown> | undefined;
+    const subagentSection = parsed.subagent as Record<string, unknown> | undefined;
+
     const config: CodebaseReaderConfig = {
       general: {
         enabled:
-          (parsed.general as Record<string, unknown>)?.enabled as boolean ??
+          (generalSection?.enabled as boolean) ??
           DEFAULT_CONFIG.general.enabled,
         threshold_tokens:
-          (parsed.general as Record<string, unknown>)?.threshold_tokens as number ??
+          (generalSection?.threshold_tokens as number) ??
           DEFAULT_CONFIG.general.threshold_tokens,
         suggest_similar:
-          (parsed.general as Record<string, unknown>)?.suggest_similar as boolean ??
+          (generalSection?.suggest_similar as boolean) ??
           DEFAULT_CONFIG.general.suggest_similar,
       },
       explorer: {
         model:
-          (parsed.explorer as Record<string, unknown>)?.model as string ??
+          (explorerSection?.model as string) ??
           DEFAULT_CONFIG.explorer.model,
         thinking:
-          (parsed.explorer as Record<string, unknown>)?.thinking as string ??
+          (explorerSection?.thinking as string) ??
           DEFAULT_CONFIG.explorer.thinking,
         max_turns:
-          (parsed.explorer as Record<string, unknown>)?.max_turns as number ??
+          (explorerSection?.max_turns as number) ??
           DEFAULT_CONFIG.explorer.max_turns,
       },
       parsing: {
         max_outline_depth:
-          (parsed.parsing as Record<string, unknown>)?.max_outline_depth as number ??
+          (parsingSection?.max_outline_depth as number) ??
           DEFAULT_CONFIG.parsing.max_outline_depth,
+      },
+      subagent: {
+        library:
+          (subagentSection?.library as string) ??
+          DEFAULT_CONFIG.subagent?.library ?? "",
       },
     };
 
@@ -102,7 +112,7 @@ export function loadConfig(cwd: string): CodebaseReaderConfig {
 export function saveConfig(cwd: string, config: CodebaseReaderConfig, scope: ConfigScope = "global"): void {
   const { path, isProject } = resolveConfigPath(cwd, scope);
 
-  const obj = {
+  const obj: Record<string, unknown> = {
     general: {
       enabled: config.general.enabled,
       threshold_tokens: config.general.threshold_tokens,
@@ -117,6 +127,13 @@ export function saveConfig(cwd: string, config: CodebaseReaderConfig, scope: Con
       max_outline_depth: config.parsing.max_outline_depth,
     },
   };
+
+  // Only write subagent section if explicitly set
+  if (config.subagent?.library) {
+    obj.subagent = {
+      library: config.subagent.library,
+    };
+  }
 
   try {
     mkdirSync(dirname(path), { recursive: true });
@@ -163,6 +180,7 @@ const CONFIG_SECTIONS: Record<string, Record<string, unknown>> = {
   general: DEFAULT_CONFIG.general as unknown as Record<string, unknown>,
   explorer: DEFAULT_CONFIG.explorer as unknown as Record<string, unknown>,
   parsing: DEFAULT_CONFIG.parsing as unknown as Record<string, unknown>,
+  subagent: DEFAULT_CONFIG.subagent as unknown as Record<string, unknown>,
 };
 
 /**

@@ -3,6 +3,12 @@
  *
  * Tests loadConfig, saveConfig, getConfigRaw, saveConfigRaw with
  * temporary directories to simulate project and global config files.
+ *
+ * Isolation note: `resolveConfigPath(cwd)` without explicit scope falls
+ * back to the global config path (~/.pi/agent/codebase-reader.toml).
+ * Tests that call `saveConfig`/`saveConfigRaw` without explicit scope
+ * silently write to the global config, which then leaks across test runs.
+ * We save/restore the global config in before/after hooks to prevent this.
  */
 
 import { describe, it, before, after } from "node:test";
@@ -14,10 +20,12 @@ import {
   rmSync,
   existsSync,
   readFileSync,
+  unlinkSync,
 } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { loadConfig, saveConfig, getConfigRaw, saveConfigRaw } from "./config.js";
+import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { CodebaseReaderConfig } from "./types.js";
 
 // ========================================================================
@@ -31,19 +39,72 @@ function writeProjectConfig(dir: string, toml: string): void {
   writeFileSync(join(piDir, "codebase-reader.toml"), toml, "utf-8");
 }
 
+/** Path to the global configuration file. */
+function globalConfigPath(): string {
+  return join(getAgentDir(), "codebase-reader.toml");
+}
+
+/**
+ * Save any existing global config and remove it so tests in this run
+ * don't accidentally pick up leftover data from prior runs. Returns
+ * a `restore` function to put it back.
+ *
+ * The root cause of cross-run pollution: `resolveConfigPath(cwd)` without
+ * explicit scope falls back to the global config path. Tests that call
+ * `saveConfig`/`saveConfigRaw` without explicit scope write there, and
+ * the `after` hook only deletes `tmpDir` — so the leftover global config
+ * interferes with the *next* test run.
+ */
+function isolateGlobalConfig(): { restore: () => void } {
+  const gPath = globalConfigPath();
+  let saved: string | null = null;
+
+  if (existsSync(gPath)) {
+    saved = readFileSync(gPath, "utf-8");
+    try {
+      unlinkSync(gPath);
+    } catch {
+      /* best effort */
+    }
+  }
+
+  return {
+    restore: () => {
+      if (saved !== null) {
+        try {
+          mkdirSync(dirname(gPath), { recursive: true });
+          writeFileSync(gPath, saved, "utf-8");
+        } catch {
+          /* best effort */
+        }
+      } else if (existsSync(gPath)) {
+        // Remove any global config that tests may have written
+        try {
+          unlinkSync(gPath);
+        } catch {
+          /* best effort */
+        }
+      }
+    },
+  };
+}
+
 // ========================================================================
 // Config tests
 // ========================================================================
 
 describe("config", () => {
   let tmpDir: string;
+  let restoreGlobal: () => void;
 
   before(() => {
     tmpDir = mkdtempSync(join(tmpdir(), "codebase-reader-config-test-"));
+    restoreGlobal = isolateGlobalConfig().restore;
   });
 
   after(() => {
     rmSync(tmpDir, { recursive: true, force: true });
+    restoreGlobal();
   });
 
   // ── loadConfig ──────────────────────────────────────────────────────
@@ -157,7 +218,7 @@ foo = "bar"
   // ── saveConfig ──────────────────────────────────────────────────────
 
   describe("saveConfig", () => {
-    it("writes config to .pi/codebase-reader.toml", () => {
+    it("writes config to project .pi/codebase-reader.toml", () => {
       const config = loadConfig(tmpDir);
       config.general.enabled = false;
       config.general.threshold_tokens = 777;
@@ -165,7 +226,9 @@ foo = "bar"
       config.explorer.max_turns = 100;
       config.parsing.max_outline_depth = 3;
 
-      saveConfig(tmpDir, config);
+      // Must pass "project" scope explicitly — without scope, saveConfig
+      // defaults to "global" and writes to ~/.pi/agent/ instead.
+      saveConfig(tmpDir, config, "project");
 
       const filePath = join(tmpDir, ".pi", "codebase-reader.toml");
       assert.ok(existsSync(filePath), "config file should be created");
@@ -198,7 +261,7 @@ enabled = false
       const updated = loadConfig(tmpDir);
       updated.general.enabled = true;
       updated.explorer.model = "new-model";
-      saveConfig(tmpDir, updated);
+      saveConfig(tmpDir, updated, "project");
 
       const reloaded = loadConfig(tmpDir);
       assert.equal(reloaded.general.enabled, true);
@@ -250,7 +313,7 @@ threshold_tokens = 500
   describe("saveConfigRaw", () => {
     it("writes raw TOML to the config file", () => {
       const raw = `[general]\nenabled = false\nthreshold_tokens = 999\n`;
-      saveConfigRaw(tmpDir, raw);
+      saveConfigRaw(tmpDir, raw, "project");
 
       const filePath = join(tmpDir, ".pi", "codebase-reader.toml");
       assert.ok(existsSync(filePath));
@@ -267,7 +330,7 @@ threshold_tokens = 500
       const cleanDir = mkdtempSync(join(tmpdir(), "config-raw-clean-"));
       try {
         const raw = `[parsing]\nmax_outline_depth = 7\n`;
-        saveConfigRaw(cleanDir, raw);
+        saveConfigRaw(cleanDir, raw, "project");
 
         assert.ok(existsSync(join(cleanDir, ".pi", "codebase-reader.toml")));
       } finally {

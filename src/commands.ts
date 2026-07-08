@@ -28,7 +28,13 @@ import {
   saveConfig,
   saveConfigRaw,
 } from "./config.js";
-import { updateExplorerAgent } from "./explorer-agent.js";
+import {
+  updateExplorerAgent,
+  isTintinwebSubagentsAvailable,
+  isNicobailonSubagentsAvailable,
+  detectSubagentLibrary,
+  formatSubagentLibrary,
+} from "./explorer-agent.js";
 import type { CodebaseReaderConfig } from "./types.js";
 
 // ---- Fuzzy search utilities ----
@@ -370,6 +376,104 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
       const location = scope === "project" ? "local" : "global";
       ctx.ui.notify(
         `${ctx.ui.theme.fg("success", "✓")} Explorer model set to ${ctx.ui.theme.fg("accent", selected)} (${location})`,
+        "info",
+      );
+    },
+  });
+
+  // ---- /codebase-reader-subagent ----
+
+  pi.registerCommand("codebase-reader-subagent", {
+    description:
+      "Show detected subagent library status and configure which library is used. " +
+      "Usage: /codebase-reader-subagent [@tintinweb/pi-subagents|pi-subagents|auto] [local|global]. " +
+      "Defaults to global (~/.pi/agent/codebase-reader.toml).",
+    handler: async (args, ctx) => {
+      ensureGlobalConfig();
+      const cwd = ctx.cwd;
+      const argStr = args?.trim().toLowerCase() || "";
+      const parts = argStr.split(/\s+/);
+      const action = parts[0];
+      const scopeArg = parts[1];
+      let scope: ConfigScope = "global";
+
+      if (scopeArg === "local") {
+        scope = "project";
+      } else if (scopeArg && scopeArg !== "global") {
+        ctx.ui.notify(
+          `Unknown scope "${scopeArg}". Use "local" or "global", or omit for global default.`,
+          "error",
+        );
+        return;
+      }
+
+      // Detect both libraries
+      const tintinwebNow = isTintinwebSubagentsAvailable();
+      const nicobailonNow = isNicobailonSubagentsAvailable();
+
+      if (!action) {
+        // Show status report
+        const config = deps.getConfig();
+        const configured = config.subagent?.library || "auto";
+        const detected = detectSubagentLibrary();
+        const lines: string[] = [
+          `${ctx.ui.theme.fg("accent", ctx.ui.theme.bold("Subagent Library Status"))}`,
+          `${ctx.ui.theme.fg("dim", "Configured:")} ${configured}`,
+          `${ctx.ui.theme.fg("dim", "Detected:")}   ${formatSubagentLibrary(detected)}`,
+        ];
+        if (tintinwebNow) {
+          lines.push(
+            `${ctx.ui.theme.fg("success", "✓")} @tintinweb/pi-subagents is loaded and active`,
+          );
+        }
+        if (nicobailonNow) {
+          lines.push(
+            `${ctx.ui.theme.fg("success", "✓")} pi-subagents (nicobailon) is loaded and active`,
+          );
+        }
+        if (!tintinwebNow && !nicobailonNow) {
+          lines.push(
+            `${ctx.ui.theme.fg("warning", "○")} No subagent library detected`,
+          );
+          lines.push(
+            `${ctx.ui.theme.fg("dim", "Install one:")}\n  pi install npm:@tintinweb/pi-subagents\n  pi install npm:pi-subagents`,
+          );
+        }
+        lines.push(
+          `${ctx.ui.theme.fg("dim", `${ctx.ui.theme.fg("accent", "/codebase-reader-subagent <library> [local|global]")} to configure preference`)}`,
+        );
+        ctx.ui.notify(lines.join("\n"), "info");
+        return;
+      }
+
+      // Set library preference
+      let library: string;
+      if (action === "auto") {
+        library = "";
+      } else if (action === "@tintinweb/pi-subagents") {
+        library = "@tintinweb/pi-subagents";
+      } else if (action === "pi-subagents") {
+        library = "pi-subagents";
+      } else {
+        ctx.ui.notify(
+          `Unknown library "${action}". Use "@tintinweb/pi-subagents", "pi-subagents", or "auto".`,
+          "error",
+        );
+        return;
+      }
+
+      // Save
+      const config = deps.getConfig();
+      config.subagent = { library };
+      saveConfig(cwd, config, scope);
+      deps.reloadConfig();
+
+      const location = scope === "project" ? "local" : "global";
+      const label = library
+        ? `set to ${ctx.ui.theme.fg("accent", library)}`
+        : "set to auto-detect";
+      ctx.ui.notify(
+        `${ctx.ui.theme.fg("success", "✓")} Subagent library ${label} (${location})`,
         "info",
       );
     },

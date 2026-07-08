@@ -28,6 +28,14 @@ export interface CodebaseReaderConfig {
   parsing: {
     max_outline_depth: number;
   };
+  /**
+   * Optional subagent library preference.
+   * One of "@tintinweb/pi-subagents", "pi-subagents" (nicobailon), or "" (auto-detect).
+   * Used for informational logging and to guide install instructions.
+   */
+  subagent?: {
+    library: string;
+  };
 }
 
 export const DEFAULT_CONFIG: CodebaseReaderConfig = {
@@ -43,6 +51,9 @@ export const DEFAULT_CONFIG: CodebaseReaderConfig = {
   },
   parsing: {
     max_outline_depth: 10,
+  },
+  subagent: {
+    library: "",
   },
 };
 
