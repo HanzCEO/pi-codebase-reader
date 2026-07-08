@@ -31,6 +31,66 @@ import {
 import { updateExplorerAgent } from "./explorer-agent.js";
 import type { CodebaseReaderConfig } from "./types.js";
 
+// ---- Fuzzy search utilities ----
+
+/**
+ * Score how well `query` matches `target` using fuzzy matching.
+ *
+ * All characters of `query` must appear **in order** somewhere in `target`
+ * (case-insensitive). Returns a numeric score where **lower is better**,
+ * or `null` when there is no match.
+ *
+ * Scoring tiers (best → worst):
+ *   0    Exact match
+ *   1    Query is a prefix
+ *   2+   Query is a contiguous substring (score = position of substring + 2)
+ *   10+  Non-contiguous fuzzy match with gap penalties
+ */
+function fuzzyScore(query: string, target: string): number | null {
+  if (!query) return 0; // empty matches everything
+
+  const q = query.toLowerCase();
+  const t = target.toLowerCase();
+
+  // Exact match → best possible score
+  if (t === q) return 0;
+
+  // Prefix match
+  if (t.startsWith(q)) return 1;
+
+  // Contiguous substring match
+  const subIdx = t.indexOf(q);
+  if (subIdx !== -1) return subIdx + 2;
+
+  // Non-contiguous fuzzy match: every character of q must appear in order
+  let qi = 0;
+  let score = 0;
+  let lastMatchPos = -2; // so the first match's consecutive bonus doesn't trigger
+
+  for (let ti = 0; ti < t.length && qi < q.length; ti++) {
+    if (t[ti] === q[qi]) {
+      // Consecutive matches lower the score (bonus)
+      if (ti === lastMatchPos + 1) {
+        score -= 1;
+      } else {
+        // Penalty for gap since last match
+        score += ti - lastMatchPos;
+      }
+      qi++;
+      lastMatchPos = ti;
+    }
+  }
+
+  // Not all query characters were found in order
+  if (qi < q.length) return null;
+
+  // Small penalty for trailing characters after last match
+  score += t.length - lastMatchPos;
+
+  // Baseline so fuzzy scores are always > substring scores
+  return score + 10;
+}
+
 export interface CommandDeps {
   getConfig: () => CodebaseReaderConfig;
   setEnabled: (enabled: boolean) => void;
@@ -146,14 +206,46 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
       const modelIds = allModels.map((m) => `${m.provider}/${m.id}`);
       const uniqueModels = [...new Set(modelIds)].sort();
 
-      // Build SelectItems from model IDs
-      const items: SelectItem[] = uniqueModels.map((id) => ({
+      // Build SelectItems from model IDs (full unfiltered list)
+      const allItems: SelectItem[] = uniqueModels.map((id) => ({
         value: id,
         label: id,
         description: "",
       }));
 
-      // Show a searchable model selector
+      /**
+       * Apply fuzzy filter to the SelectList and re-render.
+       * Replaces SelectList's prefix-only setFilter with proper fuzzy scoring.
+       */
+      function applyFuzzyFilter(
+        sl: SelectList,
+        query: string,
+        items: SelectItem[],
+        requestRender: () => void,
+      ): void {
+        if (!query) {
+          // Empty query: restore full list
+          (sl as any).items = items;
+          (sl as any).filteredItems = items;
+          (sl as any).selectedIndex = 0;
+          requestRender();
+          return;
+        }
+
+        // Score each item, filter out non-matches, sort best-first
+        const scored = items
+          .map((item) => ({ item, score: fuzzyScore(query, item.value) }))
+          .filter((x): x is { item: SelectItem; score: number } => x.score !== null)
+          .sort((a, b) => a.score - b.score);
+
+        const matched = scored.map((x) => x.item);
+        (sl as any).items = matched;
+        (sl as any).filteredItems = matched;
+        (sl as any).selectedIndex = 0;
+        requestRender();
+      }
+
+      // Show a fuzzy-searchable model selector
       const selected = await ctx.ui.custom<string | null>((tui, theme, _kb, done) => {
         const container = new Container();
 
@@ -177,10 +269,10 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
         updateSearchBar();
         container.addChild(searchBar);
 
-        // SelectList with theme
+        // SelectList with theme (initially shows all items)
         const selectList = new SelectList(
-          items,
-          Math.min(items.length, 12),
+          allItems,
+          Math.min(allItems.length, 12),
           {
             selectedPrefix: (t) => theme.fg("accent", t),
             selectedText: (t) => theme.fg("accent", t),
@@ -216,9 +308,10 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
             if (matchesKey(data, Key.backspace) || matchesKey(data, Key.ctrl("h"))) {
               if (searchQuery.length > 0) {
                 searchQuery = searchQuery.slice(0, -1);
-                selectList.setFilter(searchQuery);
                 updateSearchBar();
-                tui.requestRender();
+                applyFuzzyFilter(selectList, searchQuery, allItems, () =>
+                  tui.requestRender(),
+                );
               }
               return;
             }
@@ -227,9 +320,10 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
             if (matchesKey(data, Key.ctrl("u"))) {
               if (searchQuery.length > 0) {
                 searchQuery = "";
-                selectList.setFilter(searchQuery);
                 updateSearchBar();
-                tui.requestRender();
+                applyFuzzyFilter(selectList, searchQuery, allItems, () =>
+                  tui.requestRender(),
+                );
               }
               return;
             }
@@ -241,9 +335,10 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
               data.charCodeAt(0) <= 126
             ) {
               searchQuery += data;
-              selectList.setFilter(searchQuery);
               updateSearchBar();
-              tui.requestRender();
+              applyFuzzyFilter(selectList, searchQuery, allItems, () =>
+                tui.requestRender(),
+              );
               return;
             }
 
