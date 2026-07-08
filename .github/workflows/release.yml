@@ -1,0 +1,41 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  publish:
+    name: Publish to npm
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.release.tag_name }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          registry-url: "https://registry.npmjs.org"
+
+      - run: npm ci
+
+      - run: npm run typecheck
+
+      - run: npm run build
+
+      - name: Publish to npm
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release metadata
+        run: |
+          echo "Published version: $(node -p 'require("./package.json").version')"
+          echo "Release tag: ${{ github.event.release.tag_name }}"
+          echo "Release title: ${{ github.event.release.name }}"
