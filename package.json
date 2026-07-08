@@ -43,7 +43,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "npx tsx --test src/**/*.test.ts",
+    "test": "npx tsx --test src/*.test.ts src/**/*.test.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run typecheck && npm run build",

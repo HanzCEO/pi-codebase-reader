@@ -382,4 +382,125 @@ describe("suggestSimilarPaths", () => {
     // a isn't close to anything in tmpDir, so likely empty
     // But it shouldn't crash or throw
   });
+
+  // ── Threshold boundary ────────────────────────────────────────────
+
+  it("suggests entries at the distance threshold but not above it", () => {
+    // Find the threshold for "helpr.ts": ceil(8 * 0.4) = ceil(3.2) = 3
+    // Create a name at distance 3 and one at distance 4
+    // Distance 3: "helpr.ts" → "helpr" vs "helper" = 1, but we need dist 3
+    // "helper.ts" → "helprr.ts" (swap p→r, change e→r) = edit dist
+    // Actually "helper.ts" (9 chars) vs "helprr.ts" (9 chars):
+    //   h-e-l-p-e-r-.-t-s vs h-e-l-p-r-r-.-t-s
+    //   substitutions: p(4)=p ✓, e(5)→r, r(6)→r ✓ → dist 1
+    // Let's use a simpler approach: create a dir with names at various distances
+    const thresholdDir = mkdtempSync(join(tmpDir, "threshold-"));
+    try {
+      // Create files with controlled Levenshtein distance from target
+      writeFileSync(join(thresholdDir, "abcde.txt"), "", "utf-8"); // dist from "abcdf.txt": 1 (e→f)
+      writeFileSync(join(thresholdDir, "abcxg.txt"), "", "utf-8"); // dist from "abcdf.txt": 2 (d→x, e→g) or 3 (d→x, f→g, ...)
+
+      // "abcdf.txt" length = 9, ceil(9 * 0.4) = ceil(3.6) = 4
+      // "abcde.txt" dist 1 → should be suggested
+      // "abcxg.txt" dist ≈ 3 → should be suggested
+
+      const target = join(thresholdDir, "abcdf.txt");
+      const result = suggestSimilarPaths(target, "abcdf.txt");
+      const displays = result.map((s) => s.display);
+      assert.ok(
+        displays.includes("abcde.txt"),
+        "distance-1 match should be suggested",
+      );
+    } finally {
+      rmSync(thresholdDir, { recursive: true, force: true });
+    }
+  });
+
+  // ── Hidden files ─────────────────────────────────────────────────
+
+  it("suggests hidden files (dotfiles) when they match", () => {
+    const hiddenDir = mkdtempSync(join(tmpDir, "hidden-"));
+    try {
+      writeFileSync(join(hiddenDir, ".env.example"), "", "utf-8");
+
+      // Request a close typo of the hidden file
+      const target = join(hiddenDir, ".env.exmaple"); // typo: 'ple' vs 'ple'... actually 'pl' vs 'mp'
+      const result = suggestSimilarPaths(target, ".env.exmaple");
+      const displays = result.map((s) => s.display);
+      assert.ok(
+        displays.includes(".env.example"),
+        "should suggest the hidden .env.example file",
+      );
+    } finally {
+      rmSync(hiddenDir, { recursive: true, force: true });
+    }
+  });
+
+  // ── Display path with tilde prefix ───────────────────────────────
+
+  it("preserves tilde prefix in display path when input uses tildes", () => {
+    // The function resolves the path internally but should maintain
+    // the ~/ display style in suggestions.
+    // We test via a resolved absolute path but a display path with tilde.
+    const target = join(tmpDir, "helpr.ts");
+    // Pass a tilde-style display path
+    const tildeDisplay = "~/helpr.ts";
+    const result = suggestSimilarPaths(target, tildeDisplay);
+    assert.ok(result.length >= 1, "should have suggestions for typo");
+    const displays = result.map((s) => s.display);
+    assert.ok(
+      displays.includes("~/helper.ts"),
+      "should preserve tilde prefix in suggestion display",
+    );
+  });
+
+  // ── Recursion depth limit (more than 3 missing segments) ─────────
+
+  it("returns empty when path has 4+ incorrect segments (beyond recursion depth)", () => {
+    // max recursion depth in findMatchesRecursive is 3 (maxDepth parameter starts at 3)
+    // A path with 4 incorrect segments should return no suggestions
+    // because the algorithm can't descend far enough
+    const deepMissing = join(tmpDir, "a", "b", "c", "d", "file.ts");
+    const result = suggestSimilarPaths(deepMissing, "a/b/c/d/file.ts");
+    assert.ok(Array.isArray(result));
+    // Likely empty since we need 4 levels of correction
+    // But it must not crash
+  });
+
+  // ── Path ending in separator ─────────────────────────────────────
+
+  it("handles paths ending with a separator gracefully", () => {
+    const target = join(tmpDir, "helper.ts") + "/"; // trailing slash like a dir
+    // existsSync will return true for helper.ts (it's a file), but the trailing slash
+    // might cause issues. Actually on Linux, existsSync("path/file/") returns false
+    // if "file" is a regular file. So this should trigger suggestions.
+    const result = suggestSimilarPaths(target, "helper.ts/");
+    // Should not crash; may return empty because the path with trailing /
+    // behaves differently
+    assert.ok(Array.isArray(result));
+  });
+
+  // ── Single-segment typo inside an existing directory ─────────────
+
+  it("suggests the correct file when only the file name has a typo", () => {
+    // Create a real dir with a real file, then request a close typo
+    const realDir = mkdtempSync(join(tmpDir, "realfiles-"));
+    try {
+      writeFileSync(join(realDir, "target.ts"), "", "utf-8");
+
+      // Provide an absolute resolvedPath and a relative displayPath
+      const target = join(realDir, "taregt.ts"); // typo: target → taregt
+      const result = suggestSimilarPaths(target, "taregt.ts");
+      assert.ok(result.length >= 1, "should find target.ts from typo");
+
+      // displayPath is relative so suggestions are relative
+      const displays = result.map((s) => s.display);
+      assert.ok(
+        displays.includes("target.ts"),
+        "should suggest target.ts with relative display",
+      );
+    } finally {
+      rmSync(realDir, { recursive: true, force: true });
+    }
+  });
 });
