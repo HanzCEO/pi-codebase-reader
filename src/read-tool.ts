@@ -32,16 +32,20 @@ export function registerReadTool(pi: ExtensionAPI, deps: SmartReadDeps): void {
     name: "read",
     label: "Read",
     description:
-      "Read the contents of a file or list a directory. " +
-      "For small files returns the full content. " +
-      "For large files (supported languages: JavaScript, TypeScript, TSX, Python, Go, Rust) " +
-      "returns an AST structural outline with line ranges so you can request specific sections. " +
-      "For directories, lists entries with size and modified time. " +
-      "Use offset/limit to read specific line ranges, or read the full file by omitting them.",
+      "Read a file, read a directory, or view a file's structural outline. " +
+      "For files with a supported language (JavaScript, TypeScript, TSX, Python, Go, Rust): " +
+      "small files (<200 lines) return full content; large files return an AST structural outline " +
+      "with line ranges for drill-down. " +
+      "For unsupported file types: returns a line-count preview with first/last lines. " +
+      "For directories: returns a formatted listing with sizes and modified times. " +
+      "Use offset/limit to read specific line ranges (raw section drill-down). " +
+      "When a file is not found, similar path suggestions are offered automatically.",
     promptSnippet: "Read files with smart AST outlining for large codebases; list directories",
     promptGuidelines: [
       "Use smart read for all file reading. For large files in supported languages, you'll get a structural outline instead of full content — request specific line ranges with offset/limit to drill down.",
       "Reading a directory path returns a listing of its contents with file sizes and modified times.",
+      "For unsupported file types, a preview of the first/last lines with line count is shown.",
+      "When a file path doesn't exist, similar path suggestions are offered automatically.",
     ],
     parameters: Type.Object({
       path: Type.String({
