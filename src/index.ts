@@ -61,7 +61,7 @@ export default function (pi: ExtensionAPI) {
 
   // Check for pi-subagents
   if (isSubagentsAvailable()) {
-    console.warn("[codebase-reader] pi-subagents detected — Explorer agent ready via RPC");
+    console.warn("[codebase-reader] pi-subagents detected — Explorer agent available");
   } else {
     console.warn(
       "[codebase-reader] pi-subagents not detected. Install with: pi install npm:@tintinweb/pi-subagents",
@@ -85,13 +85,13 @@ export default function (pi: ExtensionAPI) {
   // Re-check subagents on session start (they may have been loaded after us)
   pi.on("session_start", async () => {
     if (isSubagentsAvailable()) {
-      console.warn("[codebase-reader] pi-subagents available for explorer RPC");
+      console.warn("[codebase-reader] pi-subagents available — Explorer agent ready");
     }
   });
 
   // ---- pi-subagents readiness ----
   pi.events.on("subagents:ready", () => {
-    console.warn("[codebase-reader] pi-subagents ready — Explorer can be spawned via RPC");
+    console.warn("[codebase-reader] pi-subagents ready — Explorer agent ready");
   });
 
   // ---- Register the smart read tool ----

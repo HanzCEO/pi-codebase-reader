@@ -6,11 +6,12 @@ A [pi](https://pi.dev) extension that implements the [Sweep blog post "Read File
 
 The extension overrides pi's built-in `read` tool with a smarter version:
 
-| File size | Returns |
-|-----------|---------|
-| Small (<200 lines) | Full file content |
-| Large, supported language | AST structural outline with line ranges |
-| Large, unsupported language | Line-count preview with first/last lines |
+| Input | Returns |
+|------|---------|
+| Small file (<200 lines) | Full file content |
+| Large file, supported language | AST structural outline with line ranges |
+| Large file, unsupported language | Line-count preview with first/last lines |
+| Directory path | Directory listing with sizes and modified times |
 | Any file with `offset`/`limit` | Raw section content (drill-down) |
 
 The outline shows every structural symbol — classes, functions, methods, interfaces, enums, structs, traits, impl blocks — with their line ranges and nesting hierarchy, using a token-efficient format that saves up to **90% token usage** on large files.
@@ -82,7 +83,7 @@ Agent({
 })
 ```
 
-The explorer subagent has tools `read`, `grep`, `find`, `bash` and is specialized for deep-dive code exploration.
+The explorer subagent has tools `read`, `grep`, `find`, `bash`, `ls` and is specialized for deep-dive code exploration.
 
 ## How Outlining Works
 
@@ -91,14 +92,14 @@ The explorer subagent has tools `read`, `grep`, `find`, `bash` and is specialize
 3. Returns an outline with line ranges:
 
 ```
-📄 server.ts (TypeScript) — 2855 lines, ~22.8K tokens
-├── ◈ class App (5 children) [1:850]
-│   ├── ƒ constructor(config) (3 children) [15:250]
-│   ├── ƒ handleRequest(req) [252:550]
-│   └── …
-├── ƒ main() [852:900]
-├── ◇ interface Config [902:920]
-└── ⊡ type Options [922:930]
+server.ts (TypeScript) — 2855 lines, ~22.8K tokens
+├── class App (5 children) [1:850]
+│   ├── constructor(config) (3 children) [15:250]
+│   ├── handleRequest(req) [252:550]
+│   └── ...
+├── function main() [852:900]
+├── interface Config [902:920]
+└── type Options [922:930]
 
 Use read with offset/limit to view specific sections.
 ```

@@ -9,9 +9,9 @@
  * - Disabled mode (`/codebase-reader off`): pass through to built-in behavior
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { Type } from "@sinclair/typebox";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { estimateCodeTokens, formatTokenCount } from "./token-estimate.js";
@@ -31,17 +31,20 @@ export function registerReadTool(pi: ExtensionAPI, deps: SmartReadDeps): void {
     name: "read",
     label: "Read",
     description:
-      "Read the contents of a file. For small files returns the full content. " +
+      "Read the contents of a file or list a directory. " +
+      "For small files returns the full content. " +
       "For large files (supported languages: JavaScript, TypeScript, TSX, Python, Go, Rust) " +
       "returns an AST structural outline with line ranges so you can request specific sections. " +
+      "For directories, lists entries with size and modified time. " +
       "Use offset/limit to read specific line ranges, or read the full file by omitting them.",
-    promptSnippet: "Read files with smart AST outlining for large codebases",
+    promptSnippet: "Read files with smart AST outlining for large codebases; list directories",
     promptGuidelines: [
       "Use smart read for all file reading. For large files in supported languages, you'll get a structural outline instead of full content — request specific line ranges with offset/limit to drill down.",
+      "Reading a directory path returns a listing of its contents with file sizes and modified times.",
     ],
     parameters: Type.Object({
       path: Type.String({
-        description: "Path to the file to read.",
+        description: "Path to the file or directory to read.",
       }),
       offset: Type.Optional(
         Type.Number({
@@ -69,6 +72,11 @@ export function registerReadTool(pi: ExtensionAPI, deps: SmartReadDeps): void {
 
       if (!resolvedPath || !existsSync(resolvedPath)) {
         return textResult(`File not found: ${filePath}`);
+      }
+
+      // If path is a directory, list its contents
+      if (statSync(resolvedPath).isDirectory()) {
+        return listDirectory(resolvedPath, filePath);
       }
 
       // If offset/limit is specified, this is a section drill-down — read raw lines
@@ -171,7 +179,7 @@ function unsupportedLanguageResult(
   const head = lines.slice(0, 20);
   const tail = lines.slice(-10);
   const preview = [
-    `📄 ${filePath} — ${lineCount} lines, ~${formatTokenCount(estTokens)} tokens (unsupported language)`,
+    `${filePath} — ${lineCount} lines, ~${formatTokenCount(estTokens)} tokens (unsupported language)`,
     ``,
     `First ${head.length} lines:`,
     ...head.map((l, i) => `${i + 1} │ ${l}`),
@@ -216,8 +224,92 @@ async function readFileRange(
     .join("\n");
 
   return textResult(
-    `📄 ${displayPath} lines ${startLine}-${endLine} (${selected.length} lines)\n\n${result}`,
+    `${displayPath} lines ${startLine}-${endLine} (${selected.length} lines)\n\n${result}`,
   );
+}
+
+/** Format a file size in human-readable form. */
+function formatFileSize(bytes: number): string {
+  if (bytes >= 1_000_000) return `${(bytes / 1_000_000).toFixed(1)} MB`;
+  if (bytes >= 1_000) return `${(bytes / 1_000).toFixed(1)} KB`;
+  return `${bytes} B`;
+}
+
+/** Format a Date into a compact timestamp string. */
+function formatTime(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/**
+ * Read a directory and return a listing of its contents.
+ * Sorted: directories first, then files, both alphabetically.
+ */
+function listDirectory(resolvedPath: string, displayPath: string) {
+  let entries: string[];
+  try {
+    entries = readdirSync(resolvedPath);
+  } catch (err) {
+    return textResult(
+      `Error reading directory ${displayPath}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  // Build entry info with stats
+  type Entry = { name: string; isDir: boolean; size: number; mtime: Date };
+  const items: Entry[] = [];
+  let subdirCount = 0;
+
+  for (const name of entries) {
+    try {
+      const full = join(resolvedPath, name);
+      const st = statSync(full);
+      items.push({
+        name,
+        isDir: st.isDirectory(),
+        size: st.size,
+        mtime: st.mtime,
+      });
+      if (st.isDirectory()) subdirCount++;
+    } catch {
+      // Skip entries we can't stat
+    }
+  }
+
+  // Sort: directories first, then files; alphabetical within each group
+  items.sort((a, b) => {
+    if (a.isDir !== b.isDir) return a.isDir ? -1 : 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  const lines: string[] = [];
+  const total = items.length;
+
+  lines.push(`${displayPath}/ — ${total} entries`);
+
+  // Header row
+  const nameW = Math.min(40, Math.max(4, ...items.map((e) => e.name.length + (e.isDir ? 1 : 0))));
+
+  const padName = (s: string) => s.padEnd(nameW);
+  const padType = (s: string) => s.padEnd(6);
+  const padSize = (s: string) => s.padStart(8);
+
+  lines.push(
+    `  ${padName("Name")}  ${padType("Type")}  ${padSize("Size")}  Modified`,
+  );
+  lines.push(
+    `  ${padName("").replace(/ /g, "-")}  ${padType("").replace(/ /g, "-")}  ${padSize("").replace(/ /g, "-")}  ${padName("").replace(/ /g, "-")}`,
+  );
+
+  for (const entry of items) {
+    const name = entry.isDir ? `${entry.name}/` : entry.name;
+    const type = entry.isDir ? "dir" : "file";
+    const size = entry.isDir ? "--" : formatFileSize(entry.size);
+    const time = formatTime(entry.mtime);
+    lines.push(`  ${padName(name)}  ${padType(type)}  ${padSize(size)}  ${time}`);
+  }
+
+  return textResult(lines.join("\n"));
 }
 
 function resolvePath(filePath: string, cwd: string): string | null {

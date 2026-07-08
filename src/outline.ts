@@ -91,7 +91,7 @@ function renderOutline(
   const langTag = languageName ? ` (${languageName})` : "";
   const fileLabel = filePath.split("/").pop() || filePath;
   lines.push(
-    `📄 ${fileLabel}${langTag} — ${totalLines} lines, ~${formatTokens(totalTokens)} tokens`,
+    `${fileLabel}${langTag} — ${totalLines} lines, ~${formatTokens(totalTokens)} tokens`,
   );
 
   if (symbols.length === 0) {
@@ -152,10 +152,7 @@ function formatSymbolLine(
 ): string {
   const range = `[${symbol.startLine}:${symbol.endLine}]`;
 
-  // Choose icon based on type
-  const icon = typeIcon(symbol.type);
-
-  let label = `${icon} ${symbol.type} ${symbol.name}`;
+  let label = `${symbol.type} ${symbol.name}`;
 
   // Add parameters/detail
   if (symbol.detail) {
@@ -174,34 +171,8 @@ function formatSymbolLine(
   return `${connector}${label}${childInfo} ${range}`;
 }
 
-function typeIcon(type: string): string {
-  switch (type) {
-    case "class":
-    case "struct":
-      return "◈";
-    case "interface":
-    case "trait":
-      return "◇";
-    case "enum":
-      return "◎";
-    case "function":
-    case "method":
-    case "arrow_function":
-      return "ƒ";
-    case "type":
-      return "⊡";
-    case "const":
-    case "variable":
-      return "▪";
-    case "macro":
-      return "⚙";
-    case "impl":
-      return "▣";
-    case "field":
-      return "·";
-    default:
-      return "•";
-  }
+function typeIcon(_type: string): string {
+  return "";
 }
 
 function formatTokens(tokens: number): string {
