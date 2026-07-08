@@ -12,6 +12,7 @@ import type {
   ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
 import {
+  type ConfigScope,
   getConfigRaw,
   loadConfig,
   saveConfig,
@@ -126,14 +127,32 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
   // ---- /codebase-reader-settings ----
 
   pi.registerCommand("codebase-reader-settings", {
-    description: "Edit the codebase-reader TOML configuration file",
-    handler: async (_args, ctx) => {
+    description:
+      "Edit the codebase-reader TOML configuration file. " +
+      "Usage: /codebase-reader-settings [global|local]. " +
+      "Defaults to global (~/.pi/agent/codebase-reader.toml).",
+    handler: async (args, ctx) => {
       const cwd = ctx.cwd;
-      const raw = getConfigRaw(cwd);
+      const arg = args?.trim().toLowerCase();
+      let scope: ConfigScope;
+
+      if (arg === "local") {
+        scope = "project";
+      } else if (arg === "global" || !arg) {
+        scope = "global";
+      } else {
+        ctx.ui.notify(
+          `Unknown argument "${arg}". Use "global" or "local", or omit for global default.`,
+          "error",
+        );
+        return;
+      }
+
+      const raw = getConfigRaw(cwd, scope);
 
       // Open the editor
       const edited = await ctx.ui.editor(
-        "Edit codebase-reader configuration (.toml):",
+        `Edit codebase-reader configuration (${scope === "project" ? "local" : "global"} .toml):`,
         raw,
       );
 
@@ -142,9 +161,9 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
         return;
       }
 
-      // Validate by trying to re-parse
+      // Save and reload
       try {
-        saveConfigRaw(cwd, edited);
+        saveConfigRaw(cwd, edited, scope);
         deps.reloadConfig();
 
         // Update explorer agent with potentially changed model/thinking/max_turns
@@ -155,8 +174,12 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
           maxTurns: config.explorer.max_turns,
         });
 
+        const location =
+          scope === "project"
+            ? ".pi/codebase-reader.toml"
+            : "~/.pi/agent/codebase-reader.toml";
         ctx.ui.notify(
-          `${ctx.ui.theme.fg("success", "✓")} Settings saved to .pi/codebase-reader.toml`,
+          `${ctx.ui.theme.fg("success", "✓")} Settings saved to ${location}`,
           "info",
         );
       } catch (err) {

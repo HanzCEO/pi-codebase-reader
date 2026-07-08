@@ -33,7 +33,7 @@ The outline shows every structural symbol — classes, functions, methods, inter
 | `/codebase-reader on` | Enable smart file outlining |
 | `/codebase-reader off` | Disable — files return full content |
 | `/codebase-reader-model` | Open model selector for the Explorer subagent |
-| `/codebase-reader-settings` | Edit the TOML configuration file |
+| `/codebase-reader-settings [global\|local]` | Edit the TOML configuration file (default: global; use `local` for project-level `.pi/codebase-reader.toml`) |
 
 ## Installation
 

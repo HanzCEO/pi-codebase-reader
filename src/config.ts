@@ -19,15 +19,32 @@ import { DEFAULT_CONFIG } from "./types.js";
 
 const CONFIG_FILENAME = "codebase-reader.toml";
 
-/** Resolve the config file path: project first, global fallback. */
-function resolveConfigPath(cwd: string): { path: string; isProject: boolean } {
+export type ConfigScope = "project" | "global";
+
+/**
+ * Resolve the config file path.
+ * When scope is 'global': always use the global agent directory path.
+ * When scope is 'project': always use the project-level `.pi/` path.
+ * When scope is omitted: project first, global fallback.
+ */
+function resolveConfigPath(
+  cwd: string,
+  scope?: ConfigScope,
+): { path: string; isProject: boolean } {
+  if (scope === "global") {
+    return { path: join(getAgentDir(), CONFIG_FILENAME), isProject: false };
+  }
+  if (scope === "project") {
+    return { path: join(cwd, CONFIG_DIR_NAME, CONFIG_FILENAME), isProject: true };
+  }
+
+  // Default: project first, global fallback
   const projectPath = join(cwd, CONFIG_DIR_NAME, CONFIG_FILENAME);
   if (existsSync(projectPath)) return { path: projectPath, isProject: true };
 
   const globalPath = join(getAgentDir(), CONFIG_FILENAME);
   if (existsSync(globalPath)) return { path: globalPath, isProject: false };
 
-  // Default to project path (will create when saving)
   return { path: projectPath, isProject: true };
 }
 
@@ -113,8 +130,8 @@ export function saveConfig(cwd: string, config: CodebaseReaderConfig): void {
 }
 
 /** Get the config TOML as a raw string (for editing). */
-export function getConfigRaw(cwd: string): string {
-  const { path } = resolveConfigPath(cwd);
+export function getConfigRaw(cwd: string, scope?: ConfigScope): string {
+  const { path } = resolveConfigPath(cwd, scope);
   if (existsSync(path)) {
     return readFileSync(path, "utf-8");
   }
@@ -131,14 +148,14 @@ export function getConfigRaw(cwd: string): string {
 }
 
 /** Write the config TOML from a raw string (saving after edit). */
-export function saveConfigRaw(cwd: string, raw: string): void {
-  const projectPath = join(cwd, CONFIG_DIR_NAME, CONFIG_FILENAME);
+export function saveConfigRaw(cwd: string, raw: string, scope?: ConfigScope): void {
+  const { path } = resolveConfigPath(cwd, scope);
   try {
-    mkdirSync(dirname(projectPath), { recursive: true });
-    writeFileSync(projectPath, raw, "utf-8");
+    mkdirSync(dirname(path), { recursive: true });
+    writeFileSync(path, raw, "utf-8");
   } catch (err) {
     console.warn(
-      `[codebase-reader] Failed to write config to ${projectPath}:`,
+      `[codebase-reader] Failed to write config to ${path}:`,
       err instanceof Error ? err.message : String(err),
     );
   }
