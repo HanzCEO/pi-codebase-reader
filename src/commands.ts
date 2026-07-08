@@ -11,6 +11,15 @@ import type {
   ExtensionAPI,
   ExtensionCommandContext,
 } from "@earendil-works/pi-coding-agent";
+import { DynamicBorder } from "@earendil-works/pi-coding-agent";
+import {
+  Container,
+  type SelectItem,
+  SelectList,
+  Text,
+  matchesKey,
+  Key,
+} from "@earendil-works/pi-tui";
 import {
   type ConfigScope,
   getConfigRaw,
@@ -89,17 +98,119 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
         return;
       }
 
-      // Present a selection dialog
+      // Deduplicate and sort model IDs
       const modelIds = allModels.map((m) => `${m.provider}/${m.id}`);
-      // Deduplicate
-      const uniqueModels = [...new Set(modelIds)];
+      const uniqueModels = [...new Set(modelIds)].sort();
 
-      const selected = await ctx.ui.select(
-        "Select model for Explorer subagent:",
-        uniqueModels,
-      );
+      // Build SelectItems from model IDs
+      const items: SelectItem[] = uniqueModels.map((id) => ({
+        value: id,
+        label: id,
+        description: "",
+      }));
 
-      if (!selected || typeof selected !== "string") {
+      // Show a searchable model selector
+      const selected = await ctx.ui.custom<string | null>((tui, theme, _kb, done) => {
+        const container = new Container();
+
+        // Top border
+        container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+
+        // Title
+        container.addChild(
+          new Text(theme.fg("accent", theme.bold("Select Explorer Model")), 1, 0),
+        );
+
+        // Search bar
+        let searchQuery = "";
+        const searchBar = new Text("", 1, 0);
+        const updateSearchBar = () => {
+          const label = searchQuery
+            ? `Search: ${searchQuery}`
+            : "Type to filter models…";
+          searchBar.setText(theme.fg(searchQuery ? "text" : "dim", label));
+        };
+        updateSearchBar();
+        container.addChild(searchBar);
+
+        // SelectList with theme
+        const selectList = new SelectList(
+          items,
+          Math.min(items.length, 12),
+          {
+            selectedPrefix: (t) => theme.fg("accent", t),
+            selectedText: (t) => theme.fg("accent", t),
+            description: (t) => theme.fg("muted", t),
+            scrollInfo: (t) => theme.fg("dim", t),
+            noMatch: (t) => theme.fg("warning", t),
+          },
+        );
+        selectList.onSelect = (item) => done(item.value);
+        selectList.onCancel = () => done(null);
+        container.addChild(selectList);
+
+        // Help text
+        container.addChild(
+          new Text(
+            theme.fg(
+              "dim",
+              "Type to filter • ↑↓ navigate • enter select • esc cancel",
+            ),
+            1,
+            0,
+          ),
+        );
+
+        // Bottom border
+        container.addChild(new DynamicBorder((s: string) => theme.fg("accent", s)));
+
+        return {
+          render: (w) => container.render(w),
+          invalidate: () => container.invalidate(),
+          handleInput: (data) => {
+            // Backspace: remove last char from search
+            if (matchesKey(data, Key.backspace) || matchesKey(data, Key.ctrl("h"))) {
+              if (searchQuery.length > 0) {
+                searchQuery = searchQuery.slice(0, -1);
+                selectList.setFilter(searchQuery);
+                updateSearchBar();
+                tui.requestRender();
+              }
+              return;
+            }
+
+            // Ctrl+U: clear search
+            if (matchesKey(data, Key.ctrl("u"))) {
+              if (searchQuery.length > 0) {
+                searchQuery = "";
+                selectList.setFilter(searchQuery);
+                updateSearchBar();
+                tui.requestRender();
+              }
+              return;
+            }
+
+            // If it's a printable character, add to search query
+            if (
+              data.length === 1 &&
+              data.charCodeAt(0) >= 32 &&
+              data.charCodeAt(0) <= 126
+            ) {
+              searchQuery += data;
+              selectList.setFilter(searchQuery);
+              updateSearchBar();
+              tui.requestRender();
+              return;
+            }
+
+            // Delegate navigation/confirm/cancel to SelectList
+            selectList.handleInput(data);
+            tui.requestRender();
+          },
+        };
+      });
+
+      if (!selected) {
         ctx.ui.notify("Model selection cancelled", "info");
         return;
       }
