@@ -87,6 +87,37 @@ describe("formatRepoConnectedTree", () => {
     assert.ok(result.includes("utils.py"), "top imported file");
     assert.ok(result.includes("6"), "should show total count");
     assert.ok(result.includes("Total parseable files"), "should have total");
+
+    // Verify the reverse-dependency list is sorted descending by count
+    const lines = result.split("\n");
+    const revDepIdx = lines.findIndex((l) => l.includes("Files with the most reverse-dependencies"));
+    const mostImportingIdx = lines.findIndex((l) => l.includes("Most importing files"));
+    const revDepLines = lines.slice(revDepIdx + 1, mostImportingIdx).filter(Boolean);
+    assert.ok(revDepLines.length >= 2, "should have at least 2 reverse-dep entries");
+
+    const counts = revDepLines.map((l) => {
+      const m = l.match(/imported by (\d+)/);
+      return m ? parseInt(m[1], 10) : -1;
+    });
+    for (let i = 1; i < counts.length; i++) {
+      assert.ok(
+        counts[i - 1] >= counts[i],
+        `reverse-dep entries must be sorted descending: ${counts[i - 1]} >= ${counts[i]} (index ${i - 1} vs ${i})`,
+      );
+    }
+
+    // Also verify the most-importing files list is sorted descending
+    const mostImpLines = lines.slice(mostImportingIdx + 1).filter(Boolean);
+    const impCounts = mostImpLines.map((l) => {
+      const m = l.match(/(\d+) import\(s\)/);
+      return m ? parseInt(m[1], 10) : -1;
+    });
+    for (let i = 1; i < impCounts.length; i++) {
+      assert.ok(
+        impCounts[i - 1] >= impCounts[i],
+        `most-importing entries must be sorted descending: ${impCounts[i - 1]} >= ${impCounts[i]} (index ${i - 1} vs ${i})`,
+      );
+    }
   });
 });
 

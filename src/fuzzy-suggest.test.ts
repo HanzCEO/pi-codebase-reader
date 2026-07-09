@@ -386,33 +386,64 @@ describe("suggestSimilarPaths", () => {
   // ── Threshold boundary ────────────────────────────────────────────
 
   it("suggests entries at the distance threshold but not above it", () => {
-    // Find the threshold for "helpr.ts": ceil(8 * 0.4) = ceil(3.2) = 3
-    // Create a name at distance 3 and one at distance 4
-    // Distance 3: "helpr.ts" → "helpr" vs "helper" = 1, but we need dist 3
-    // "helper.ts" → "helprr.ts" (swap p→r, change e→r) = edit dist
-    // Actually "helper.ts" (9 chars) vs "helprr.ts" (9 chars):
-    //   h-e-l-p-e-r-.-t-s vs h-e-l-p-r-r-.-t-s
-    //   substitutions: p(4)=p ✓, e(5)→r, r(6)→r ✓ → dist 1
-    // Let's use a simpler approach: create a dir with names at various distances
     const thresholdDir = mkdtempSync(join(tmpDir, "threshold-"));
     try {
-      // Create files with controlled Levenshtein distance from target
-      writeFileSync(join(thresholdDir, "abcde.txt"), "", "utf-8"); // dist from "abcdf.txt": 1 (e→f)
-      writeFileSync(join(thresholdDir, "abcxg.txt"), "", "utf-8"); // dist from "abcdf.txt": 2 (d→x, e→g) or 3 (d→x, f→g, ...)
-
+      // Create files with controlled Levenshtein distance from target "abcdf.txt"
       // "abcdf.txt" length = 9, ceil(9 * 0.4) = ceil(3.6) = 4
-      // "abcde.txt" dist 1 → should be suggested
-      // "abcxg.txt" dist ≈ 3 → should be suggested
+      writeFileSync(join(thresholdDir, "abcde.txt"), "", "utf-8"); // dist from "abcdf.txt": 1 (e→f) → within threshold
+      writeFileSync(join(thresholdDir, "abcxg.txt"), "", "utf-8"); // dist from "abcdf.txt": 2 (d→x, f→g) → within threshold
+      writeFileSync(join(thresholdDir, "zzzzz.txt"), "", "utf-8"); // dist from "abcdf.txt": 5 → above threshold
 
       const target = join(thresholdDir, "abcdf.txt");
       const result = suggestSimilarPaths(target, "abcdf.txt");
       const displays = result.map((s) => s.display);
+
       assert.ok(
         displays.includes("abcde.txt"),
-        "distance-1 match should be suggested",
+        "distance-1 match should be suggested (within threshold)",
+      );
+      assert.ok(
+        displays.includes("abcxg.txt"),
+        "distance-2 match should be suggested (within threshold)",
+      );
+      assert.ok(
+        !displays.includes("zzzzz.txt"),
+        "distance-5 match should NOT be suggested (above threshold)",
       );
     } finally {
       rmSync(thresholdDir, { recursive: true, force: true });
+    }
+  });
+
+  it("uses length-scaled threshold for long path segments", () => {
+    // Verify the dynamic multiplier (firstMissing.length * 0.4) produces
+    // a higher threshold for long names, beyond the Math.max(2, ...) floor.
+    // For a 12-char name: threshold = ceil(12 * 0.4) = ceil(4.8) = 5
+    const longDir = mkdtempSync(join(tmpDir, "long-threshold-"));
+    try {
+      // All files must be written BEFORE calling suggestSimilarPaths
+      writeFileSync(join(longDir, "longgile.txt"), "", "utf-8"); // dist 1 from "longfile.txt" (sub g→f)
+      writeFileSync(join(longDir, "lonfile.txt"), "", "utf-8");  // dist 3 from "longfile.txt" (omit ng, add f)
+      writeFileSync(join(longDir, "xyzxyzxyz.txt"), "", "utf-8"); // dist ≈ 12 → far above threshold
+
+      const target = join(longDir, "longfile.txt");
+      const result = suggestSimilarPaths(target, "longfile.txt");
+      const displays = result.map((s) => s.display);
+
+      assert.ok(
+        displays.includes("longgile.txt"),
+        "distance-1 match should be suggested (within scaled threshold)",
+      );
+      assert.ok(
+        displays.includes("lonfile.txt"),
+        "distance-3 match should be suggested (within scaled threshold of 5)",
+      );
+      assert.ok(
+        !displays.includes("xyzxyzxyz.txt"),
+        "distance-12 match should NOT be suggested (above threshold)",
+      );
+    } finally {
+      rmSync(longDir, { recursive: true, force: true });
     }
   });
 

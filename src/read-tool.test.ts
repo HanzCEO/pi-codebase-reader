@@ -139,6 +139,16 @@ describe("registerReadTool", () => {
     const text = await executeRead(tool, join(tmpDir, "small.md"), tmpDir);
     assert.ok(text.includes("small.md"), "should include file name");
     assert.ok(text.includes("Hello world"), "should include content");
+    // Verify it is full content, NOT a preview:
+    assert.ok(text.includes("📄"), "should include the full-content emoji header");
+    assert.ok(
+      !text.includes("│"),
+      "should NOT include line-number prefixes (would indicate preview)",
+    );
+    assert.ok(
+      !text.includes("(unsupported language)"),
+      "should NOT include the unsupported-language annotation",
+    );
   });
 
   // ── Large file (outline vs preview) ───────────────────────────────
@@ -204,6 +214,15 @@ describe("registerReadTool", () => {
     assert.ok(
       text.includes("function fn150()"),
       "disabled mode should show raw source, not outline",
+    );
+    // Verify it is raw source, NOT an outline:
+    assert.ok(
+      text.includes("{ return 150; }"),
+      "should include raw source body, not just the symbol signature",
+    );
+    assert.ok(
+      !text.includes("[150:150]"),
+      "should NOT include outline range annotations",
     );
   });
 
