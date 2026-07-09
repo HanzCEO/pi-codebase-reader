@@ -33,7 +33,7 @@ export function registerReadTool(pi: ExtensionAPI, deps: SmartReadDeps): void {
     label: "Read",
     description:
       "Read a file, read a directory, or view a file's structural outline. " +
-      "For files with a supported language (JavaScript, TypeScript, TSX, Python, Go, Rust): " +
+      "For files with a supported language (JavaScript, TypeScript, TSX, Python, Go, Rust, Solidity): " +
       "small files (<200 lines) return full content; large files return an AST structural outline " +
       "with line ranges for drill-down. " +
       "For unsupported file types: returns a line-count preview with first/last lines. " +

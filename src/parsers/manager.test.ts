@@ -65,6 +65,10 @@ describe("detectLanguage", () => {
     assert.equal(detectLanguage("lib.rs"), "rust");
   });
 
+  it("detects Solidity for .sol files", () => {
+    assert.equal(detectLanguage("contract.sol"), "solidity");
+  });
+
   // ── Case insensitivity ────────────────────────────────────────────
 
   it("detects case-insensitively for uppercase extensions", () => {
@@ -72,6 +76,7 @@ describe("detectLanguage", () => {
     assert.equal(detectLanguage("Script.PY"), "python");
     assert.equal(detectLanguage("Main.GO"), "go");
     assert.equal(detectLanguage("Lib.RS"), "rust");
+    assert.equal(detectLanguage("Contract.SOL"), "solidity");
   });
 
   it("detects case-insensitively for mixed-case extensions", () => {
@@ -175,6 +180,10 @@ describe("languageLabel", () => {
 
   it("returns 'Rust' for 'rust' key", () => {
     assert.equal(languageLabel("rust"), "Rust");
+  });
+
+  it("returns 'Solidity' for 'solidity' key", () => {
+    assert.equal(languageLabel("solidity"), "Solidity");
   });
 
   it("returns the key itself for unknown keys", () => {

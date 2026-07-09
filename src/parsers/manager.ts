@@ -48,6 +48,11 @@ const GRAMMAR_REGISTRY: Record<
     wasm: "tree-sitter-rust.wasm",
     label: "Rust",
   },
+  solidity: {
+    package: "tree-sitter-solidity",
+    wasm: "tree-sitter-solidity.wasm",
+    label: "Solidity",
+  },
 };
 
 /** Map file extensions to grammar keys. */
@@ -63,6 +68,7 @@ const EXTENSION_MAP: Record<string, string> = {
   ".py": "python",
   ".go": "go",
   ".rs": "rust",
+  ".sol": "solidity",
 };
 
 // ---- Singleton state ----
@@ -154,6 +160,8 @@ function extractSymbols(
       return extractGo(node, source, depth);
     case "rust":
       return extractRust(node, source, depth);
+    case "solidity":
+      return extractSolidity(node, source, depth);
     default:
       return [];
   }
@@ -668,4 +676,330 @@ function extractRustImplBody(
   }
 
   return results;
+}
+
+// ========================================================================
+// Solidity
+// ========================================================================
+
+function extractSolidity(
+  node: Node,
+  source: string,
+  depth: number,
+): SymbolInfo[] {
+  const results: SymbolInfo[] = [];
+  const MAX_DEPTH = depth + 10;
+
+  for (let i = 0; i < node.namedChildCount; i++) {
+    const child = node.namedChild(i);
+    if (!child) continue;
+
+    let symbol: SymbolInfo | null = null;
+
+    if (child.type === "contract_declaration") {
+      const name = fieldChildText(child, "name", source) || "<anonymous>";
+      const [sl, el] = nodeRange(child);
+
+      // Collect inheritance detail
+      const inherits: string[] = [];
+      for (let j = 0; j < child.namedChildCount; j++) {
+        const c = child.namedChild(j);
+        if (c && c.type === "inheritance_specifier") {
+          const ancestor = c.childForFieldName("ancestor");
+          if (ancestor) {
+            inherits.push(source.slice(ancestor.startIndex, ancestor.endIndex));
+          }
+        }
+      }
+      const detail = inherits.length > 0 ? `is ${inherits.join(", ")}` : undefined;
+
+      symbol = { name, type: "contract", startLine: sl, endLine: el, detail };
+
+      // Recurse into contract body
+      const body = child.childForFieldName("body");
+      if (body && depth < MAX_DEPTH) {
+        symbol.children = extractSolidityBody(body, source, depth + 1);
+      }
+    } else if (child.type === "interface_declaration") {
+      const name = fieldChildText(child, "name", source) || "<anonymous>";
+      const [sl, el] = nodeRange(child);
+
+      const inherits: string[] = [];
+      for (let j = 0; j < child.namedChildCount; j++) {
+        const c = child.namedChild(j);
+        if (c && c.type === "inheritance_specifier") {
+          const ancestor = c.childForFieldName("ancestor");
+          if (ancestor) {
+            inherits.push(source.slice(ancestor.startIndex, ancestor.endIndex));
+          }
+        }
+      }
+      const detail = inherits.length > 0 ? `is ${inherits.join(", ")}` : undefined;
+
+      symbol = { name, type: "interface", startLine: sl, endLine: el, detail };
+
+      const body = child.childForFieldName("body");
+      if (body && depth < MAX_DEPTH) {
+        symbol.children = extractSolidityBody(body, source, depth + 1);
+      }
+    } else if (child.type === "library_declaration") {
+      const name = fieldChildText(child, "name", source) || "<anonymous>";
+      const [sl, el] = nodeRange(child);
+      symbol = { name, type: "library", startLine: sl, endLine: el };
+
+      const body = child.childForFieldName("body");
+      if (body && depth < MAX_DEPTH) {
+        symbol.children = extractSolidityBody(body, source, depth + 1);
+      }
+    } else {
+      // File-level item
+      symbol = extractSolidityItem(child, source);
+    }
+
+    if (symbol) results.push(symbol);
+  }
+
+  return results;
+}
+
+function extractSolidityBody(
+  node: Node,
+  source: string,
+  depth: number,
+): SymbolInfo[] {
+  const results: SymbolInfo[] = [];
+  const MAX_DEPTH = depth + 10;
+
+  for (let i = 0; i < node.namedChildCount; i++) {
+    const child = node.namedChild(i);
+    if (!child) continue;
+
+    const symbol = extractSolidityItem(child, source);
+    if (!symbol) continue;
+
+    // Recurse into struct and enum bodies for nested members
+    if (symbol.type === "struct" && depth < MAX_DEPTH) {
+      const bodyNode = child.childForFieldName("body");
+      if (bodyNode) {
+        symbol.children = [];
+        for (let j = 0; j < bodyNode.namedChildCount; j++) {
+          const m = bodyNode.namedChild(j);
+          if (!m) continue;
+          if (m.type === "struct_member") {
+            const memberName = fieldChildText(m, "name", source) || "";
+            const memberType = m.childForFieldName("type");
+            const typeStr = memberType
+              ? source.slice(memberType.startIndex, memberType.endIndex)
+              : "";
+            const [msl, mel] = nodeRange(m);
+            symbol.children.push({
+              name: memberName,
+              type: "field",
+              startLine: msl,
+              endLine: mel,
+              detail: typeStr,
+            });
+          }
+        }
+      }
+    } else if (symbol.type === "enum" && depth < MAX_DEPTH) {
+      const bodyNode = child.childForFieldName("body");
+      if (bodyNode) {
+        symbol.children = [];
+        for (let j = 0; j < bodyNode.namedChildCount; j++) {
+          const m = bodyNode.namedChild(j);
+          if (!m || m.type !== "enum_value") continue;
+          const [msl, mel] = nodeRange(m);
+          symbol.children.push({
+            name: source.slice(m.startIndex, m.endIndex).trim(),
+            type: "enum_value",
+            startLine: msl,
+            endLine: mel,
+          });
+        }
+      }
+    }
+
+    results.push(symbol);
+  }
+
+  return results;
+}
+
+/** Collect all unnamed `parameter`/`event_parameter`/`error_parameter` named children and return their source ranges joined. */
+function solidityParamsText(
+  node: Node,
+  source: string,
+  paramType: string = "parameter",
+): string | undefined {
+  const parts: string[] = [];
+  for (let j = 0; j < node.namedChildCount; j++) {
+    const c = node.namedChild(j);
+    if (c && c.type === paramType) {
+      parts.push(source.slice(c.startIndex, c.endIndex));
+    }
+  }
+  return parts.length > 0 ? `(${parts.join(", ")})` : undefined;
+}
+
+function extractSolidityItem(
+  child: Node,
+  source: string,
+): SymbolInfo | null {
+  const type = child.type;
+
+  if (type === "function_definition") {
+    const name = fieldChildText(child, "name", source) || "<anonymous>";
+    const [sl, el] = nodeRange(child);
+    const params = solidityParamsText(child, source, "parameter");
+
+    // Check for return type
+    let returnType: string | undefined;
+    for (let j = 0; j < child.namedChildCount; j++) {
+      const c = child.namedChild(j);
+      if (c && c.type === "return_type_definition") {
+        returnType = source.slice(c.startIndex, c.endIndex);
+        break;
+      }
+    }
+
+    // Collect qualifiers: visibility, state_mutability, virtual, override, modifiers
+    const qualifiers: string[] = [];
+    for (let j = 0; j < child.namedChildCount; j++) {
+      const c = child.namedChild(j);
+      if (!c) continue;
+      if (c.type === "visibility" || c.type === "state_mutability") {
+        qualifiers.push(source.slice(c.startIndex, c.endIndex));
+      } else if (c.type === "virtual") {
+        qualifiers.push("virtual");
+      } else if (c.type === "override_specifier") {
+        qualifiers.push(source.slice(c.startIndex, c.endIndex));
+      } else if (c.type === "modifier_invocation") {
+        qualifiers.push(source.slice(c.startIndex, c.endIndex));
+      }
+    }
+
+    const parts: string[] = [];
+    if (params) parts.push(params);
+    if (qualifiers.length > 0) parts.push(qualifiers.join(" "));
+    if (returnType) parts.push(returnType);
+    const detail = parts.length > 0 ? parts.join(" ") : undefined;
+
+    return { name, type: "function", startLine: sl, endLine: el, detail };
+  }
+
+  if (type === "constructor_definition") {
+    const [sl, el] = nodeRange(child);
+    const params = solidityParamsText(child, source, "parameter");
+
+    const qualifiers: string[] = [];
+    for (let j = 0; j < child.namedChildCount; j++) {
+      const c = child.namedChild(j);
+      if (!c) continue;
+      if (c.type === "visibility" || c.type === "state_mutability") {
+        qualifiers.push(source.slice(c.startIndex, c.endIndex));
+      } else if (c.type === "modifier_invocation") {
+        qualifiers.push(source.slice(c.startIndex, c.endIndex));
+      }
+    }
+
+    const parts: string[] = [];
+    if (params) parts.push(params);
+    if (qualifiers.length > 0) parts.push(qualifiers.join(" "));
+    const detail = parts.length > 0 ? parts.join(" ") : undefined;
+
+    return { name: "constructor", type: "constructor", startLine: sl, endLine: el, detail };
+  }
+
+  if (type === "modifier_definition") {
+    const name = fieldChildText(child, "name", source) || "<anonymous>";
+    const [sl, el] = nodeRange(child);
+    const detail = solidityParamsText(child, source, "parameter");
+    return { name, type: "modifier", startLine: sl, endLine: el, detail };
+  }
+
+  if (type === "event_definition") {
+    const name = fieldChildText(child, "name", source) || "<anonymous>";
+    const [sl, el] = nodeRange(child);
+    return { name, type: "event", startLine: sl, endLine: el };
+  }
+
+  if (type === "error_declaration") {
+    const name = childText(child, "identifier", source) || "<anonymous>";
+    const [sl, el] = nodeRange(child);
+    // Collect error parameters for detail
+    const params: string[] = [];
+    for (let j = 0; j < child.namedChildCount; j++) {
+      const c = child.namedChild(j);
+      if (c && c.type === "error_parameter") {
+        const typeName = c.childForFieldName("type");
+        if (typeName) {
+          const typeText = source.slice(typeName.startIndex, typeName.endIndex);
+          const paramName = fieldChildText(c, "name", source);
+          params.push(paramName ? `${typeText} ${paramName}` : typeText);
+        }
+      }
+    }
+    const detail = params.length > 0 ? `(${params.join(", ")})` : undefined;
+    return { name, type: "error", startLine: sl, endLine: el, detail };
+  }
+
+  if (type === "struct_declaration") {
+    const name = childText(child, "identifier", source) || fieldChildText(child, "name", source) || "<anonymous>";
+    const [sl, el] = nodeRange(child);
+    return { name, type: "struct", startLine: sl, endLine: el };
+  }
+
+  if (type === "enum_declaration") {
+    const name = fieldChildText(child, "name", source) || childText(child, "identifier", source) || "<anonymous>";
+    const [sl, el] = nodeRange(child);
+    return { name, type: "enum", startLine: sl, endLine: el };
+  }
+
+  if (type === "fallback_receive_definition") {
+    const [sl, el] = nodeRange(child);
+
+    // Distinguish fallback vs receive by checking first keyword child
+    let symbolType = "fallback";
+    for (let j = 0; j < child.childCount; j++) {
+      const c = child.child(j);
+      if (c && c.type === "receive") {
+        symbolType = "receive";
+        break;
+      }
+    }
+
+    const qualifiers: string[] = [];
+    for (let j = 0; j < child.namedChildCount; j++) {
+      const c = child.namedChild(j);
+      if (!c) continue;
+      if (c.type === "visibility" || c.type === "state_mutability") {
+        qualifiers.push(source.slice(c.startIndex, c.endIndex));
+      } else if (c.type === "virtual") {
+        qualifiers.push("virtual");
+      } else if (c.type === "override_specifier") {
+        qualifiers.push(source.slice(c.startIndex, c.endIndex));
+      } else if (c.type === "modifier_invocation") {
+        qualifiers.push(source.slice(c.startIndex, c.endIndex));
+      }
+    }
+
+    return {
+      name: symbolType,
+      type: symbolType,
+      startLine: sl,
+      endLine: el,
+      detail: qualifiers.length > 0 ? qualifiers.join(" ") : undefined,
+    };
+  }
+
+  if (type === "state_variable_declaration") {
+    const name = fieldChildText(child, "name", source) || "<anonymous>";
+    const [sl, el] = nodeRange(child);
+    const varType = child.childForFieldName("type");
+    const detail = varType ? source.slice(varType.startIndex, varType.endIndex) : undefined;
+    return { name, type: "variable", startLine: sl, endLine: el, detail };
+  }
+
+  return null;
 }

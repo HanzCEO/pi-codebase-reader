@@ -26,6 +26,7 @@ The outline shows every structural symbol — classes, functions, methods, inter
 | Python | `tree-sitter-python` | classes, functions, async defs, decorated definitions |
 | Go | `tree-sitter-go` | functions, methods (with receivers), structs, interfaces, const/var blocks |
 | Rust | `tree-sitter-rust` | functions, structs, enums, traits, impl blocks, macros |
+| Solidity | `tree-sitter-solidity` | contracts, interfaces, libraries, functions, modifiers, events, errors, structs, enums, constructors, fallback/receive |
 
 ## Commands
 

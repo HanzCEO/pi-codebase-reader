@@ -2,7 +2,7 @@
  * pi-codebase-reader — Smart AST-based file outlining + Explorer subagent.
  *
  * Overrides the built-in `read` tool to return structural outlines for large
- * files in supported languages (TypeScript, JavaScript, Python, Go, Rust).
+ * files in supported languages (TypeScript, JavaScript, Python, Go, Rust, Solidity).
  * Registers the `explorer` subagent for use with EITHER
  * `@tintinweb/pi-subagents` OR `nicobailon/pi-subagents`.
  *
