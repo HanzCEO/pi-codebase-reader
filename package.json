@@ -38,6 +38,7 @@
     "tree-sitter-solidity": "^1.2.13"
   },
   "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.80.3",
     "@types/node": "^25.5.0",
     "typescript": "^6.0.0"
   },
