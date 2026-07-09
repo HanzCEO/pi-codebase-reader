@@ -96,7 +96,7 @@ describe("explorer-agent", () => {
 
       // System prompt body
       assert.ok(
-        content.includes("code exploration specialist"),
+        content.includes("code exploration and bug-localization specialist"),
         "system prompt should describe the role",
       );
       assert.ok(

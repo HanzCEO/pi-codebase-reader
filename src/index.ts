@@ -6,6 +6,15 @@
  * Registers the `explorer` subagent for use with EITHER
  * `@tintinweb/pi-subagents` OR `nicobailon/pi-subagents`.
  *
+ * SHERLOC Integration:
+ * - Registers `repo_tree` (filtered repository tree) and `connected_tree`
+ *   (import dependency graph) as pi tools.
+ * - The Explorer agent's system prompt includes the SHERLOC bug-localization
+ *   protocol with structured diagnostic output format.
+ * - Self-recovery mechanisms (loop detection, context management, etc.)
+ *   are available for tool-execution wrappers.
+ * - Optional `/sherloc-judge` command scores findings via LLM-as-judge.
+ *
  * Users install their preferred subagent library:
  *   pi install npm:@tintinweb/pi-subagents
  *   — or —
@@ -16,11 +25,12 @@
  *   /codebase-reader-model [local|global]
  *   /codebase-reader-settings [global|local]
  *   /codebase-reader-subagent [local|global]
+ *   /sherloc-judge
  */
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { registerCommands } from "./commands.js";
-import { loadConfig, saveConfig } from "./config.js";
+import { loadConfig } from "./config.js";
 import {
   ensureExplorerAgent,
   isTintinwebSubagentsAvailable,
@@ -30,6 +40,7 @@ import {
   type SubagentLibrary,
 } from "./explorer-agent.js";
 import { registerReadTool } from "./read-tool.js";
+import { registerRepotreeTool, registerConnectedTreeTool } from "./sherloc/tools.js";
 import type { CodebaseReaderConfig } from "./types.js";
 
 export default function (pi: ExtensionAPI) {
@@ -69,6 +80,10 @@ export default function (pi: ExtensionAPI) {
     );
   }
 
+  // ---- Register SHERLOC tools ----
+  registerRepotreeTool(pi);
+  registerConnectedTreeTool(pi);
+
   // ---- Session lifecycle ----
   pi.on("session_start", async (_event, ctx) => {
     // Reload config per session
@@ -93,11 +108,11 @@ export default function (pi: ExtensionAPI) {
 
     if (tintinweb) {
       console.warn(
-        "[codebase-reader] @tintinweb/pi-subagents available — Explorer agent ready",
+        "[codebase-reader] @tintinweb/pi-subagents available — Explorer agent ready (SHERLOC tools: repo_tree, connected_tree)",
       );
     } else if (nicobailon) {
       console.warn(
-        "[codebase-reader] pi-subagents (nicobailon) available — Explorer agent ready",
+        "[codebase-reader] pi-subagents (nicobailon) available — Explorer agent ready (SHERLOC tools: repo_tree, connected_tree)",
       );
     } else {
       const hint = config.subagent?.library

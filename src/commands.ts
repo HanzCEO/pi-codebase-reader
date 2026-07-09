@@ -36,6 +36,8 @@ import {
   formatSubagentLibrary,
 } from "./explorer-agent.js";
 import type { CodebaseReaderConfig } from "./types.js";
+import { resolve } from "node:path";
+import { readFileSync } from "node:fs";
 
 // ---- Fuzzy search utilities ----
 
@@ -546,4 +548,97 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
       }
     },
   });
+
+  // ---- /sherloc-judge ----
+
+  pi.registerCommand("sherloc-judge", {
+    description:
+      "Score SHERLOC diagnostic findings using LLM-as-judge. " +
+      "Usage: /sherloc-judge <finding-json-path> [problem-statement] [gt-patch-path]. " +
+      "Optional — run after the Explorer agent produces findings to assess quality.",
+    handler: async (args, ctx) => {
+      const parts = (args || "").trim().split(/\s+/);
+      if (parts.length < 1 || !parts[0]) {
+        ctx.ui.notify(
+          "Usage: /sherloc-judge <finding-json-path> [problem-statement] [gt-patch-path]\n" +
+          "The finding JSON file should contain: finding (object with locationExplanation, rootCause, solutionIdea, dependencies, testingImpact) and locations (array of {filePath, startLine, endLine}).",
+          "error",
+        );
+        return;
+      }
+
+      const cwd = ctx.cwd;
+
+      // Read finding JSON
+      const findingPath = resolve(cwd, parts[0]);
+      let raw: string;
+      try {
+        raw = readFileSync(findingPath, "utf-8");
+      } catch (err) {
+        ctx.ui.notify(
+          `Failed to read finding file: ${err instanceof Error ? err.message : String(err)}`,
+          "error",
+        );
+        return;
+      }
+
+      let findingData: {
+        finding: { locationExplanation: string; rootCause: string; solutionIdea: string; dependencies: string; testingImpact: string };
+        locations: Array<{ filePath: string; startLine: number; endLine: number }>;
+        problemStatement?: string;
+      };
+      try {
+        findingData = JSON.parse(raw);
+      } catch {
+        ctx.ui.notify(
+          "Invalid JSON in finding file.",
+          "error",
+        );
+        return;
+      }
+
+      const problemStatement =
+        parts.slice(1).join(" ") || findingData.problemStatement || "(not provided)";
+
+      // Read ground truth patch if provided
+      let gtPatch: string | undefined;
+      if (parts[2]) {
+        const gtPath = resolve(cwd, parts[2]);
+        try {
+          gtPatch = readFileSync(gtPath, "utf-8");
+        } catch {
+          gtPatch = undefined;
+        }
+      }
+
+      // Build judge prompt
+      const { buildJudgePrompt, parseJudgeResponse, computeComposite, formatJudgeResult, passesQualityFilter } =
+        await import("./sherloc/quality-judge.js");
+
+      const prompt = buildJudgePrompt({
+        problemStatement,
+        gtPatch,
+        finding: findingData.finding,
+        locations: findingData.locations,
+      });
+
+      ctx.ui.notify(
+        "Scoring finding with LLM judge...",
+        "info",
+      );
+
+      // For now, we output the judge prompt and tell the user how to use it
+      // The actual LLM scoring call depends on the pi runtime's model availability
+      ctx.ui.notify(
+        `Judge prompt prepared (${prompt.length} chars).\n\n` +
+        `To score, pipe this prompt to an LLM and parse the JSON response.\n\n` +
+        `Finding data:\n` +
+        `  Root cause: ${findingData.finding.rootCause.slice(0, 100)}...\n` +
+        `  Solution idea: ${findingData.finding.solutionIdea.slice(0, 100)}...\n` +
+        `  Locations: ${findingData.locations.length} location(s)\n`,
+        "info",
+      );
+    },
+  });
 }
+

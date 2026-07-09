@@ -10,9 +10,12 @@ import {
   detectLanguage,
   languageLabel,
   parseCode,
+  parseFileImports,
+  type ImportInfo,
 } from "./manager.js";
 
-export { detectLanguage, languageLabel };
+export { detectLanguage, languageLabel, parseFileImports };
+export type { ImportInfo };
 
 export interface ParseFileResult {
   symbols: SymbolInfo[];
@@ -43,5 +46,30 @@ export async function parseSourceFile(
       err instanceof Error ? err.message : String(err),
     );
     return { symbols: [], language: lang, languageName: languageLabel(lang) };
+  }
+}
+
+/**
+ * Extract import statements from a source file.
+ * Returns empty array if language is unsupported or parsing fails.
+ */
+export async function extractFileImports(
+  filePath: string,
+  content: string,
+): Promise<ImportInfo[]> {
+  const lang = detectLanguage(filePath);
+
+  if (!lang) {
+    return [];
+  }
+
+  try {
+    return await parseFileImports(lang, content);
+  } catch (err) {
+    console.warn(
+      `[codebase-reader] Import parse failed for ${filePath}:`,
+      err instanceof Error ? err.message : String(err),
+    );
+    return [];
   }
 }

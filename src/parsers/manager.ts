@@ -1003,3 +1003,389 @@ function extractSolidityItem(
 
   return null;
 }
+
+// ========================================================================
+// Import extraction
+// ========================================================================
+
+/**
+ * Extract import statements from parsed source code.
+ * Returns a list of ImportInfo for each import in the file.
+ */
+export async function parseFileImports(
+  key: string,
+  source: string,
+): Promise<ImportInfo[]> {
+  await ensureInit();
+
+  const lang = await loadLanguage(key);
+  if (!sharedParser) throw new Error("Parser not initialized");
+
+  sharedParser.setLanguage(lang);
+  const tree = sharedParser.parse(source);
+  if (!tree) return [];
+
+  return extractImports(key, tree.rootNode, source);
+}
+
+function extractImports(
+  key: string,
+  node: Node,
+  source: string,
+): ImportInfo[] {
+  switch (key) {
+    case "javascript":
+    case "typescript":
+    case "tsx":
+      return extractJSImports(node, source);
+    case "python":
+      return extractPythonImports(node, source);
+    case "go":
+      return extractGoImports(node, source);
+    case "rust":
+      return extractRustImports(node, source);
+    case "solidity":
+      return extractSolidityImports(node, source);
+    default:
+      return [];
+  }
+}
+
+// ---- JavaScript / TypeScript / TSX imports ----
+
+function extractJSImports(node: Node, source: string): ImportInfo[] {
+  const results: ImportInfo[] = [];
+
+  for (let i = 0; i < node.namedChildCount; i++) {
+    const child = node.namedChild(i);
+    if (!child) continue;
+
+    // import { foo } from 'bar';  or  import foo from 'bar';
+    if (child.type === "import_statement") {
+      const sourceNode = child.childForFieldName("source");
+      if (!sourceNode) continue;
+      const sourceText = extractStringLiteral(sourceNode, source);
+      if (!sourceText) continue;
+
+      const names = extractImportNames(child, source);
+      results.push({
+        source: sourceText,
+        names,
+        lineNumber: child.startPosition.row + 1,
+      });
+    }
+
+    // export { foo } from 'bar';
+    if (child.type === "export_statement") {
+      const sourceNode = child.childForFieldName("source");
+      if (!sourceNode) continue;
+      const sourceText = extractStringLiteral(sourceNode, source);
+      if (!sourceText) continue;
+
+      const names = extractImportNames(child, source);
+
+      results.push({
+        source: sourceText,
+        names,
+        lineNumber: child.startPosition.row + 1,
+      });
+    }
+
+    // const x = require('bar');
+    if (
+      child.type === "lexical_declaration" ||
+      child.type === "variable_declaration"
+    ) {
+      for (let j = 0; j < child.namedChildCount; j++) {
+        const decl = child.namedChild(j);
+        if (!decl || decl.type !== "variable_declarator") continue;
+        const value = decl.childForFieldName("value");
+        if (!value || value.type !== "call_expression") continue;
+        const func = value.childForFieldName("function");
+        if (!func) continue;
+        const funcText = source.slice(func.startIndex, func.endIndex);
+        if (funcText !== "require") continue;
+
+        const args = value.childForFieldName("arguments");
+        if (!args || args.namedChildCount === 0) continue;
+        const firstArg = args.namedChild(0);
+        if (!firstArg) continue;
+        const sourceText = extractStringLiteral(firstArg, source);
+        if (!sourceText) continue;
+
+        const name = fieldChildText(decl, "name", source);
+        results.push({
+          source: sourceText,
+          names: name ? [name] : [],
+          lineNumber: child.startPosition.row + 1,
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
+function extractImportNames(node: Node, source: string): string[] {
+  const names: string[] = [];
+
+  // import_clause is a named child, NOT a field in tree-sitter grammar
+  for (let j = 0; j < node.namedChildCount; j++) {
+    const c = node.namedChild(j);
+    if (!c) continue;
+
+    if (c.type === "import_clause") {
+      extractNamesFromClause(c, source, names);
+    }
+
+    // export_statement may have export_clause with export_specifiers
+    if (c.type === "export_clause") {
+      for (let k = 0; k < c.namedChildCount; k++) {
+        const spec = c.namedChild(k);
+        if (spec && spec.type === "export_specifier") {
+          const name = fieldChildText(spec, "name", source);
+          if (name) names.push(name);
+        }
+      }
+    }
+  }
+
+  return names;
+}
+
+/** Extract imported symbol names from an import_clause node. */
+function extractNamesFromClause(clause: Node, source: string, names: string[]): void {
+  for (let j = 0; j < clause.namedChildCount; j++) {
+    const c = clause.namedChild(j);
+    if (!c) continue;
+
+    if (c.type === "namespace_import") {
+      const alias = c.childForFieldName("alias");
+      if (alias) names.push("* as " + source.slice(alias.startIndex, alias.endIndex));
+    } else if (c.type === "named_imports") {
+      for (let k = 0; k < c.namedChildCount; k++) {
+        const spec = c.namedChild(k);
+        if (spec && spec.type === "import_specifier") {
+          const name = fieldChildText(spec, "name", source);
+          if (name) names.push(name);
+        }
+      }
+    } else {
+      // default import (identifier)
+      names.push(source.slice(c.startIndex, c.endIndex));
+    }
+  }
+}
+
+// ---- Python imports ----
+
+function extractPythonImports(node: Node, source: string): ImportInfo[] {
+  const results: ImportInfo[] = [];
+
+  for (let i = 0; i < node.namedChildCount; i++) {
+    const child = node.namedChild(i);
+    if (!child) continue;
+
+    // import foo
+    if (child.type === "import_statement") {
+      for (let j = 0; j < child.namedChildCount; j++) {
+        const c = child.namedChild(j);
+        if (!c) continue;
+        if (c.type === "dotted_name") {
+          const mod = source.slice(c.startIndex, c.endIndex);
+          results.push({
+            source: mod,
+            names: [],
+            lineNumber: child.startPosition.row + 1,
+          });
+        } else if (c.type === "aliased_import") {
+          const name = fieldChildText(c, "name", source);
+          const alias = fieldChildText(c, "alias", source);
+          if (name) {
+            results.push({
+              source: name,
+              names: alias ? [alias] : [],
+              lineNumber: child.startPosition.row + 1,
+            });
+          }
+        }
+      }
+    }
+
+    // from foo import bar
+    if (child.type === "import_from_statement") {
+      const moduleNode = child.childForFieldName("module_name");
+      const sourceText = moduleNode
+        ? source.slice(moduleNode.startIndex, moduleNode.endIndex)
+        : "";
+      if (!sourceText) continue;
+
+      const names: string[] = [];
+      for (let j = 0; j < child.namedChildCount; j++) {
+        const c = child.namedChild(j);
+        if (!c) continue;
+        if (c.type === "dotted_name") {
+          names.push(source.slice(c.startIndex, c.endIndex));
+        } else if (c.type === "aliased_import") {
+          const name = fieldChildText(c, "name", source);
+          if (name) names.push(name);
+        } else if (c.type === "wildcard_import") {
+          names.push("*");
+        }
+      }
+
+      results.push({
+        source: sourceText,
+        names,
+        lineNumber: child.startPosition.row + 1,
+      });
+    }
+  }
+
+  return results;
+}
+
+// ---- Go imports ----
+
+function extractGoImports(node: Node, source: string): ImportInfo[] {
+  const results: ImportInfo[] = [];
+
+  for (let i = 0; i < node.namedChildCount; i++) {
+    const child = node.namedChild(i);
+    if (!child || child.type !== "import_declaration") continue;
+
+    // Go's import_declaration wraps: single import_spec, or import_spec_list (grouped)
+    for (let j = 0; j < child.namedChildCount; j++) {
+      const spec = child.namedChild(j);
+      if (!spec) continue;
+
+      // Grouped imports: import_spec_list contains import_spec children
+      if (spec.type === "import_spec_list") {
+        for (let k = 0; k < spec.namedChildCount; k++) {
+          const innerSpec = spec.namedChild(k);
+          if (!innerSpec || innerSpec.type !== "import_spec") continue;
+          const result = extractGoImportSpec(innerSpec, source);
+          if (result) results.push(result);
+        }
+      } else if (spec.type === "import_spec") {
+        const result = extractGoImportSpec(spec, source);
+        if (result) results.push(result);
+      }
+    }
+  }
+
+  return results;
+}
+
+function extractGoImportSpec(spec: Node, source: string): ImportInfo | null {
+  const pathNode = spec.childForFieldName("path");
+  if (!pathNode) return null;
+  const sourceText = extractStringLiteral(pathNode, source);
+  if (!sourceText) return null;
+
+  const name = fieldChildText(spec, "name", source);
+  return {
+    source: sourceText,
+    names: name ? [name] : [],
+    lineNumber: spec.startPosition.row + 1,
+  };
+}
+
+// ---- Rust imports ----
+
+function extractRustImports(node: Node, source: string): ImportInfo[] {
+  const results: ImportInfo[] = [];
+
+  for (let i = 0; i < node.namedChildCount; i++) {
+    const child = node.namedChild(i);
+    if (!child) continue;
+
+    // use foo::bar;
+    if (child.type === "use_declaration") {
+      const arg = child.childForFieldName("argument");
+      if (!arg) continue;
+
+      const sourceText = source
+        .slice(arg.startIndex, arg.endIndex)
+        .replace(/\s+/g, " ");
+      results.push({
+        source: sourceText,
+        names: [],
+        lineNumber: child.startPosition.row + 1,
+      });
+    }
+
+    // extern crate foo;
+    if (child.type === "extern_crate_declaration") {
+      const name = fieldChildText(child, "name", source);
+      if (name) {
+        results.push({
+          source: name,
+          names: [],
+          lineNumber: child.startPosition.row + 1,
+        });
+      }
+    }
+  }
+
+  return results;
+}
+
+// ---- Solidity imports ----
+
+function extractSolidityImports(node: Node, source: string): ImportInfo[] {
+  const results: ImportInfo[] = [];
+
+  for (let i = 0; i < node.namedChildCount; i++) {
+    const child = node.namedChild(i);
+    if (!child || child.type !== "import_directive") continue;
+
+    const sourceNode = child.childForFieldName("source");
+    if (!sourceNode) continue;
+    const sourceText = extractStringLiteral(sourceNode, source);
+    if (!sourceText) continue;
+
+    const names: string[] = [];
+    // Check for named imports: import {A, B} from "foo.sol";
+    for (let j = 0; j < child.namedChildCount; j++) {
+      const c = child.namedChild(j);
+      if (!c) continue;
+      if (c.type === "import_clause") {
+        for (let k = 0; k < c.namedChildCount; k++) {
+          const sym = c.namedChild(k);
+          if (sym && sym.type === "symbol_alias") {
+            const name = fieldChildText(sym, "name", source);
+            if (name) names.push(name);
+          }
+        }
+      }
+    }
+
+    results.push({
+      source: sourceText,
+      names,
+      lineNumber: child.startPosition.row + 1,
+    });
+  }
+
+  return results;
+}
+
+// ---- Shared helpers ----
+
+/** Extract a string literal's value (strip surrounding quotes). */
+function extractStringLiteral(node: Node, source: string): string | null {
+  const text = source.slice(node.startIndex, node.endIndex);
+  // Handle single, double, and backtick quotes
+  const match = text.match(/^['"`](.*)['"`]$/s);
+  return match ? match[1] : text;
+}
+
+// ---- ImportInfo type (declared locally so manager.ts stays self-contained) ----
+
+export interface ImportInfo {
+  source: string;
+  names: string[];
+  lineNumber: number;
+}
+
