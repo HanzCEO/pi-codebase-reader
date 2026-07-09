@@ -29,16 +29,17 @@
   "dependencies": {
     "@sinclair/typebox": "^0.34.49",
     "smol-toml": "^1.7.0",
-    "web-tree-sitter": "^0.26.10",
-    "tree-sitter-python": "^0.25.0",
     "tree-sitter-go": "^0.25.0",
-    "tree-sitter-rust": "^0.24.0",
     "tree-sitter-javascript": "^0.25.0",
+    "tree-sitter-python": "^0.25.0",
+    "tree-sitter-rust": "^0.24.0",
+    "tree-sitter-solidity": "^1.2.13",
     "tree-sitter-typescript": "^0.23.2",
-    "tree-sitter-solidity": "^1.2.13"
+    "web-tree-sitter": "^0.26.10"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.80.3",
+    "@earendil-works/pi-tui": "^0.80.3",
     "@types/node": "^25.5.0",
     "typescript": "^6.0.0"
   },

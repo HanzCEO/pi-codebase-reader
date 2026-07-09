@@ -282,14 +282,14 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
           allItems,
           Math.min(allItems.length, 12),
           {
-            selectedPrefix: (t) => theme.fg("accent", t),
-            selectedText: (t) => theme.fg("accent", t),
-            description: (t) => theme.fg("muted", t),
-            scrollInfo: (t) => theme.fg("dim", t),
-            noMatch: (t) => theme.fg("warning", t),
+            selectedPrefix: (t: string) => theme.fg("accent", t),
+            selectedText: (t: string) => theme.fg("accent", t),
+            description: (t: string) => theme.fg("muted", t),
+            scrollInfo: (t: string) => theme.fg("dim", t),
+            noMatch: (t: string) => theme.fg("warning", t),
           },
         );
-        selectList.onSelect = (item) => done(item.value);
+        selectList.onSelect = (item: SelectItem) => done(item.value);
         selectList.onCancel = () => done(null);
         container.addChild(selectList);
 
