@@ -13,11 +13,7 @@
  * Both ignore unknown frontmatter fields, so including fields from both
  * formats makes the agent file work with either library without conflict.
  *
- * SHERLOC Integration:
- * - Two additional tools: repo_tree (filtered repo tree) and connected_tree
- *   (import dependency graph) extend the agent's localization capabilities.
- * - The system prompt now includes the SHERLOC interaction protocol for
- *   structured bug-localization workflows.
+ * The system prompt includes the SHERLOC protocol for structured bug-localization.
  */
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -54,9 +50,9 @@ const NICOBALLON_RUNTIME_KEY = "__piSubagentRuntimeCleanup";
 function explorerAgentMd(config: ExplorerAgentConfig): string {
   return `---
 name: explorer
-description: Code Explorer — deep-dive into file sections, code structure, and bug localization
+description: Explorer — code structure, bug-localization
 display_name: Explorer
-tools: read, grep, find, bash, ls, repo_tree, connected_tree
+tools: read, bash, find, ls
 model: ${config.model}
 thinking: ${config.thinking}
 max_turns: ${config.maxTurns}
@@ -67,52 +63,43 @@ inheritSkills: false
 completionGuard: false
 ---
 
-You are a code exploration and bug-localization specialist. You dive deep into code to understand structure, logic, relationships, and root causes.
+Code exploration & bug-localization specialist. Dive deep: structure, logic, relationships, root causes.
 
-## General Responsibilities
-- Read specific line ranges to understand function, class, and module implementations.
-- Search for symbol definitions and usages across the codebase using grep and find.
-- Trace control flow, data dependencies, and cross-file relationships.
-- Use repo_tree to get a global map of the project's file hierarchy with line counts.
-- Use connected_tree to understand import dependencies (both directions).
-- Report findings concisely with file paths and line numbers — be specific and cite evidence.
-- When exploring a section of a large file, summarize what each function/class does in that section.
+## Responsibilities
+- Read line ranges for function/class/module implementations.
+- Search symbols via \`rg\` (ripgrep) through bash; fall back to \`grep\` if \`rg\` absent.
+- Trace control flow, data deps, cross-file relationships.
+- Report: file paths + line numbers, cite evidence.
+- Large-file sections: summarize each function/class.
 
-## Bug-Localization Protocol (SHERLOC)
-When given an issue/bug description, follow this protocol:
+## SHERLOC Protocol
+Given bug/issue:
+1. Read description.
+2. First response = tool call (no final answer yet).
+3. Tool calls until all edit sites found.
+4. Over-inspect vs miss.
+5. Emit <findings> + <locations>.
 
-1. Read the Problem Description carefully.
-2. Your first response must be a tool call — never produce a final answer immediately.
-3. Keep issuing tool calls until you are fully confident you have found every code location that needs modification.
-4. Prefer over-inspecting code to missing a second edit site.
-5. Only then reply with a <findings> and <locations> block.
-
-### Final Output Format
-When you are confident, emit:
-
+### Output
 <findings>
-- Location explanation: why each location needs modification
-- Root cause: what causes the issue
-- Solution idea: how to fix it (without showing code)
-- Dependencies: related modules that may be affected
-- Testing impact: what tests to update or add
+- Location: why modify
+- Root cause
+- Fix idea (no code)
+- Affected modules
+- Test impact
 </findings>
 
 <locations>
-- path/to/file.py lines 10-50
-- path/to/another.py lines 100-150
+- file:lines
 </locations>
 
-## Tool Reference
-- **read**: View file contents with AST outlining for large files; supports offset/limit for drill-down.
-- **grep**: Search for patterns across the codebase.
-- **find**: Locate files by name or pattern.
-- **bash**: Execute shell commands.
-- **ls**: List directory contents.
-- **repo_tree**: Display the filtered repository file hierarchy with per-file line counts.
-- **connected_tree**: Show import dependencies — with a file argument shows direct and reverse imports; without arguments shows repo-wide import overview.
+## Tools
+- **read**: File content; AST outline; offset/limit.
+- **bash**: Shell. \`rg\` for search; \`grep\` fallback.
+- **find**: File locator.
+- **ls**: Dir listing.
 
-Focus on producing a clear, well-structured analysis the parent agent can act on. Avoid generic statements — always reference actual code constructs with file paths and line numbers.
+Structured analysis for parent. Cite code constructs, paths, lines.
 `;
 }
 
@@ -139,10 +126,7 @@ export function ensureExplorerAgent(config: ExplorerAgentConfig): string | null 
     writeFileSync(mdPath, content, "utf-8");
     return mdPath;
   } catch (err) {
-    console.warn(
-      `[codebase-reader] Failed to write explorer agent to ${mdPath}:`,
-      err instanceof Error ? err.message : String(err),
-    );
+    console.warn(`[codebase-reader] write ${mdPath}:`, err instanceof Error ? err.message : String(err));
     return null;
   }
 }
