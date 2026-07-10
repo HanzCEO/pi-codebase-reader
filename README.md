@@ -9,13 +9,31 @@ The extension overrides pi's built-in `read` tool with a smarter version:
 | Input | Returns |
 |------|---------|
 | Small file (<200 lines) | Full file content |
-| Large file, supported language | AST structural outline with line ranges |
+| Large file, supported language | AST structural outline with code previews and line ranges |
 | Large file, unsupported language | Line-count preview with first/last lines |
 | Directory path | Directory listing with sizes and modified times |
 | Any file with `offset`/`limit` | Raw section content (drill-down) |
+| Any file with `ranges` | Multiple non-contiguous sections in one call (auto-merged) |
 | Non-existent path | Fuzzy suggestions for similar paths (can be disabled in config) |
 
-The outline shows every structural symbol — classes, functions, methods, interfaces, enums, structs, traits, impl blocks — with their line ranges and nesting hierarchy, using a token-efficient format that saves up to **90% token usage** on large files.
+The outline shows every structural symbol — classes, functions, methods, interfaces, enums, structs, traits, impl blocks — with their line ranges, nesting hierarchy, and **code previews** (first few lines of each symbol). This token-efficient format reduces total interaction cost by:
+
+- **Fewer tool calls**: Use `ranges` to read multiple sections in one call instead of separate reads
+- **Reduced drill-downs**: Code previews let you understand symbols without additional reads
+- **Smart merging**: Adjacent ranges are automatically merged to minimize output
+
+### Token savings example
+
+**Without extension** (1 call, ~5000 tokens):
+```
+read("large-file.ts") → Full 500-line file content
+```
+
+**With extension** (1-2 calls, ~800 tokens):
+```
+read("large-file.ts") → Outline with previews (~500 tokens)
+read("large-file.ts", ranges: [{offset:100,limit:50}, {offset:300,limit:30}]) → 2 sections (~300 tokens)
+```
 
 ## Supported Languages
 
@@ -72,6 +90,8 @@ Stored in `.pi/codebase-reader.toml` (project) or `~/.pi/agent/codebase-reader.t
 enabled = true
 threshold_tokens = 10000
 suggest_similar = true
+include_previews = true
+preview_lines = 3
 
 [explorer]
 model = "anthropic/claude-sonnet-4-20250514"
@@ -89,6 +109,8 @@ max_outline_depth = 10
 | `general.enabled` | `true` | Enable/disable smart file outlining |
 | `general.threshold_tokens` | `10000` | Token budget for AST outlines; outlines exceeding this are progressively shallowed |
 | `general.suggest_similar` | `true` | When a file path is not found, suggests similar paths via recursive fuzzy matching |
+| `general.include_previews` | `true` | Include code previews (first few lines) in outline output |
+| `general.preview_lines` | `3` | Number of lines to preview per symbol in outline |
 | `explorer.model` | `anthropic/claude-sonnet-4-20250514` | Model used by the Explorer subagent |
 | `explorer.thinking` | `"medium"` | Thinking level for the Explorer subagent |
 | `explorer.max_turns` | `30` | Maximum agentic turns for the Explorer subagent |
@@ -131,22 +153,51 @@ Use `/codebase-reader-subagent` (without arguments) to see which library is dete
 
 1. Agent calls `read("large-file.ts")`
 2. Extension parses the file with tree-sitter AST
-3. Returns an outline with line ranges:
+3. Returns an outline with code previews and line ranges:
 
 ```
 server.ts (TypeScript) — 2855 lines, ~22.8K tokens
 ├── class App (5 children) [1:850]
 │   ├── constructor(config) (3 children) [15:250]
+│   │   ```
+│   │   constructor(private config: AppConfig) {
+│   │     this.db = createDatabase(config.dbUrl);
+│   │     this.cache = new LRUCache({ max: 1000 });
+│   │   ```
 │   ├── handleRequest(req) [252:550]
+│   │   ```
+│   │   async handleRequest(req: Request): Promise<Response> {
+│   │     const url = new URL(req.url);
+│   │     if (url.pathname === '/api/users') {
+│   │   ```
 │   └── ...
 ├── function main() [852:900]
+│   ```
+│   async function main() {
+│     const config = loadConfig();
+│     const app = new App(config);
+│   ```
 ├── interface Config [902:920]
 └── type Options [922:930]
 
-Use read with offset/limit to view specific sections.
+Use read with offset/limit to view specific sections, or ranges for multiple sections.
 ```
 
-4. Agent reads specific sections by calling `read("large-file.ts", { offset: 252, limit: 298 })`
+4. Agent reads specific sections:
+
+   **Single section** (one call):
+   ```
+   read("large-file.ts", { offset: 252, limit: 300 })
+   ```
+
+   **Multiple sections** (one call, auto-merged):
+   ```
+   read("large-file.ts", ranges: [
+     { offset: 15, limit: 235 },   // constructor
+     { offset: 252, limit: 300 },  // handleRequest
+     { offset: 852, limit: 50 }    // main
+   ])
+   ```
 
 ## Similar Path Suggestions
 

@@ -35,17 +35,19 @@ export function registerReadTool(pi: ExtensionAPI, deps: SmartReadDeps): void {
       "Read a file, read a directory, or view a file's structural outline. " +
       "For files with a supported language (JavaScript, TypeScript, TSX, Python, Go, Rust, Solidity): " +
       "small files (<200 lines) return full content; large files return an AST structural outline " +
-      "with line ranges for drill-down. " +
+      "with line ranges and code previews for drill-down. " +
       "For unsupported file types: returns a line-count preview with first/last lines. " +
       "For directories: returns a formatted listing with sizes and modified times. " +
-      "Use offset/limit to read specific line ranges (raw section drill-down). " +
+      "Use offset/limit to read specific line ranges, or ranges (array) to read multiple non-contiguous sections in one call. " +
+      "Adjacent ranges are automatically merged to reduce tool calls. " +
       "When a file is not found, similar path suggestions are offered automatically.",
     promptSnippet: "Read files with smart AST outlining for large codebases; list directories",
     promptGuidelines: [
-      "Use smart read for all file reading. For large files in supported languages, you'll get a structural outline instead of full content — request specific line ranges with offset/limit to drill down.",
+      "Use smart read for all file reading. For large files in supported languages, you'll get a structural outline with code previews instead of full content — request specific line ranges with offset/limit to drill down, or use ranges for multiple sections in one call.",
       "Reading a directory path returns a listing of its contents with file sizes and modified times.",
       "For unsupported file types, a preview of the first/last lines with line count is shown.",
       "When a file path doesn't exist, similar path suggestions are offered automatically.",
+      "When you need multiple sections, use the ranges parameter to read them all in one call — this saves tokens compared to multiple separate reads.",
     ],
     parameters: Type.Object({
       path: Type.String({
@@ -61,6 +63,17 @@ export function registerReadTool(pi: ExtensionAPI, deps: SmartReadDeps): void {
           description: "Maximum number of lines to read.",
         }),
       ),
+      ranges: Type.Optional(
+        Type.Array(
+          Type.Object({
+            offset: Type.Number({ description: "Start line (1-indexed)" }),
+            limit: Type.Number({ description: "Number of lines to read" }),
+          }),
+          {
+            description: "Read multiple non-contiguous sections in one call. Adjacent ranges are auto-merged. Use this instead of multiple separate read calls to save tokens.",
+          },
+        ),
+      ),
     }),
     renderShell: "self" as const,
 
@@ -71,6 +84,7 @@ export function registerReadTool(pi: ExtensionAPI, deps: SmartReadDeps): void {
       const filePath = params.path;
       const offset = params.offset;
       const limit = params.limit;
+      const ranges = params.ranges;
 
       // Resolve path
       const resolvedPath = resolvePath(filePath, ctx.cwd);
@@ -90,6 +104,11 @@ export function registerReadTool(pi: ExtensionAPI, deps: SmartReadDeps): void {
       // If path is a directory, list its contents
       if (statSync(resolvedPath).isDirectory()) {
         return listDirectory(resolvedPath, filePath);
+      }
+
+      // If ranges is specified, read multiple sections in one call
+      if (ranges && ranges.length > 0) {
+        return readMultipleRanges(resolvedPath, filePath, ranges);
       }
 
       // If offset/limit is specified, this is a section drill-down — read raw lines
@@ -143,6 +162,9 @@ export function registerReadTool(pi: ExtensionAPI, deps: SmartReadDeps): void {
           totalTokens: tokens,
           filePath,
           languageName,
+          fileLines: lines,
+          includePreviews: config.general.include_previews,
+          previewLines: config.general.preview_lines,
         });
 
         return textResult(outline);
@@ -238,6 +260,81 @@ async function readFileRange(
 
   return textResult(
     `${displayPath} lines ${startLine}-${endLine} (${selected.length} lines)\n\n${result}`,
+  );
+}
+
+/**
+ * Read multiple non-contiguous ranges from a file.
+ * Automatically merges adjacent/overlapping ranges to reduce output size.
+ */
+async function readMultipleRanges(
+  resolvedPath: string,
+  displayPath: string,
+  ranges: Array<{ offset: number; limit: number }>,
+) {
+  let content: string;
+  try {
+    content = readFileSync(resolvedPath, "utf-8");
+  } catch (err) {
+    return textResult(
+      `Error reading ${displayPath}: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
+
+  const lines = content.split("\n");
+  const totalLines = lines.length;
+
+  // Normalize and sort ranges
+  const normalized = ranges
+    .map((r) => ({
+      start: Math.max(1, r.offset),
+      end: Math.min(totalLines, r.offset + r.limit - 1),
+    }))
+    .filter((r) => r.start <= r.end)
+    .sort((a, b) => a.start - b.start);
+
+  if (normalized.length === 0) {
+    return textResult(`${displayPath}: No valid ranges to read.`);
+  }
+
+  // Merge adjacent/overlapping ranges (within 5 lines of each other)
+  const merged: Array<{ start: number; end: number }> = [normalized[0]];
+  for (let i = 1; i < normalized.length; i++) {
+    const last = merged[merged.length - 1];
+    const curr = normalized[i];
+    // Merge if overlapping or within 5 lines
+    if (curr.start <= last.end + 5) {
+      last.end = Math.max(last.end, curr.end);
+    } else {
+      merged.push(curr);
+    }
+  }
+
+  // Build output
+  const sections: string[] = [];
+  let totalSelected = 0;
+
+  for (const range of merged) {
+    const selected = lines.slice(range.start - 1, range.end);
+    totalSelected += selected.length;
+    const block = selected
+      .map((l, i) => `${range.start + i} │ ${l}`)
+      .join("\n");
+    sections.push(block);
+  }
+
+  // Format range labels
+  const rangeLabels = merged
+    .map((r) => r.start === r.end ? `${r.start}` : `${r.start}-${r.end}`)
+    .join(", ");
+
+  const wereMerged = merged.length < normalized.length;
+  const mergeNote = wereMerged
+    ? ` (${normalized.length} ranges merged into ${merged.length})`
+    : "";
+
+  return textResult(
+    `${displayPath} [${rangeLabels}] (${totalSelected} lines)${mergeNote}\n\n${sections.join("\n\n")}`,
   );
 }
 

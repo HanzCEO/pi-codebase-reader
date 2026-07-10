@@ -239,7 +239,13 @@ export function getConfigRaw(cwd: string, scope?: ConfigScope): string {
   }
   // Return formatted defaults
   return stringifyToml({
-    general: { enabled: true, threshold_tokens: 10_000, suggest_similar: true },
+    general: {
+      enabled: true,
+      threshold_tokens: 10_000,
+      suggest_similar: true,
+      include_previews: true,
+      preview_lines: 3,
+    },
     explorer: {
       model: "anthropic/claude-sonnet-4-20250514",
       thinking: "medium",

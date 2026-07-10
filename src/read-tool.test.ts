@@ -31,10 +31,12 @@ async function executeRead(
   cwd: string,
   offset?: number,
   limit?: number,
+  ranges?: Array<{ offset: number; limit: number }>,
 ): Promise<string> {
   const params: Record<string, unknown> = { path };
   if (offset !== undefined) params.offset = offset;
   if (limit !== undefined) params.limit = limit;
+  if (ranges !== undefined) params.ranges = ranges;
 
   const result = await tool.execute(
     "test-call-id",
@@ -166,10 +168,16 @@ describe("registerReadTool", () => {
       "outline header should mention line count",
     );
     // If parsing works, we see function symbols; otherwise empty-symbol notice
-    // Either way it's a structural outline, not raw source
+    // With code previews enabled, the outline contains first few lines of each symbol
+    // The outline should be structural (contain tree connectors) not raw source
     assert.ok(
-      !text.includes("function fn1() { return 1; }") || text.includes("(no parseable symbols"),
-      "outline should not contain raw source body",
+      text.includes("├──") || text.includes("└──") || text.includes("(no parseable symbols"),
+      "outline should contain tree structure or empty-symbol notice",
+    );
+    // Code previews should show the first few lines (wrapped in backticks)
+    assert.ok(
+      text.includes("```"),
+      "outline should contain code previews with backtick fences",
     );
   });
 
@@ -368,6 +376,97 @@ describe("registerReadTool", () => {
     assert.ok(
       text.includes("large.ts"),
       "should still reference the file",
+    );
+  });
+
+  // ── Multi-range reads ───────────────────────────────────────────────
+
+  it("reads multiple non-contiguous ranges in one call", async () => {
+    tool = createTool(true);
+    const text = await executeRead(
+      tool,
+      join(tmpDir, "large.ts"),
+      tmpDir,
+      undefined,
+      undefined,
+      [
+        { offset: 10, limit: 3 },
+        { offset: 50, limit: 3 },
+        { offset: 100, limit: 3 },
+      ],
+    );
+    assert.ok(
+      text.includes("function fn10()"),
+      "should include first range",
+    );
+    assert.ok(
+      text.includes("function fn50()"),
+      "should include second range",
+    );
+    assert.ok(
+      text.includes("function fn100()"),
+      "should include third range",
+    );
+    assert.ok(
+      text.includes("function fn12()"),
+      "should include end of first range",
+    );
+    assert.ok(
+      text.includes("function fn52()"),
+      "should include end of second range",
+    );
+    assert.ok(
+      text.includes("function fn102()"),
+      "should include end of third range",
+    );
+  });
+
+  it("merges adjacent ranges automatically", async () => {
+    tool = createTool(true);
+    const text = await executeRead(
+      tool,
+      join(tmpDir, "large.ts"),
+      tmpDir,
+      undefined,
+      undefined,
+      [
+        { offset: 20, limit: 5 },
+        { offset: 24, limit: 5 },  // Overlaps with first range
+      ],
+    );
+    // Should show merged range 20-28
+    assert.ok(
+      text.includes("function fn20()"),
+      "should include start of merged range",
+    );
+    assert.ok(
+      text.includes("function fn28()"),
+      "should include end of merged range",
+    );
+    assert.ok(
+      text.includes("merged"),
+      "should indicate ranges were merged",
+    );
+  });
+
+  it("handles empty ranges array by falling back to outline", async () => {
+    tool = createTool(true);
+    const text = await executeRead(
+      tool,
+      join(tmpDir, "large.ts"),
+      tmpDir,
+      undefined,
+      undefined,
+      [],
+    );
+    // Empty ranges array falls back to normal outline behavior
+    assert.ok(
+      text.includes("large.ts"),
+      "should show file outline",
+    );
+    assert.ok(
+      text.includes("lines"),
+      "should show line count",
     );
   });
 
