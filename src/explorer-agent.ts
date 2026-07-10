@@ -16,7 +16,7 @@
  * The system prompt includes the SHERLOC protocol for structured bug-localization.
  */
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import type { ExplorerAgentConfig } from "./types.js";
@@ -52,7 +52,7 @@ function explorerAgentMd(config: ExplorerAgentConfig): string {
 name: explorer
 description: Explorer — code structure, bug-localization
 display_name: Explorer
-tools: read, bash, find, ls
+tools: read, grep, find, bash, ls, repo_tree, connected_tree
 model: ${config.model}
 thinking: ${config.thinking}
 max_turns: ${config.maxTurns}
@@ -67,7 +67,7 @@ Code exploration & bug-localization specialist. Dive deep: structure, logic, rel
 
 ## Responsibilities
 - Read line ranges for function/class/module implementations.
-- Search symbols via \`rg\` (ripgrep) through bash; fall back to \`grep\` if \`rg\` absent.
+- Search for symbol definitions and usages using the \`grep\` tool directly (NOT via bash).
 - Trace control flow, data deps, cross-file relationships.
 - Report: file paths + line numbers, cite evidence.
 - Large-file sections: summarize each function/class.
@@ -95,9 +95,17 @@ Given bug/issue:
 
 ## Tools
 - **read**: File content; AST outline; offset/limit.
-- **bash**: Shell. \`rg\` for search; \`grep\` fallback.
+- **grep**: Search for patterns across the codebase. Use this DIRECTLY, not via bash.
 - **find**: File locator.
+- **bash**: Shell commands (use only when grep/find cannot accomplish the task).
 - **ls**: Dir listing.
+- **repo_tree**: Repository file hierarchy with line counts.
+- **connected_tree**: Import dependency graph.
+
+## Critical: Use grep tool, not bash grep
+The \`grep\` tool is a dedicated pi tool that returns structured results. Always use it directly:
+- ✅ grep(pattern: "func.*Create", path: "core/vm")
+- ❌ bash(command: "grep -rn 'func.*Create' core/vm")
 
 Structured analysis for parent. Cite code constructs, paths, lines.
 `;
@@ -147,6 +155,41 @@ export function updateExplorerAgent(config: ExplorerAgentConfig): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Remove the explorer.md agent definition file.
+ * Called during extension uninstall or session shutdown to clean up.
+ */
+export function removeExplorerAgent(): boolean {
+  const agentsDir = join(getAgentDir(), "agents");
+  const mdPath = join(agentsDir, "explorer.md");
+
+  try {
+    if (existsSync(mdPath)) {
+      unlinkSync(mdPath);
+      console.warn(`[codebase-reader] Explorer agent removed: ${mdPath}`);
+    }
+    return true;
+  } catch (err) {
+    console.warn(
+      `[codebase-reader] Failed to remove explorer agent:`,
+      err instanceof Error ? err.message : String(err),
+    );
+    return false;
+  }
+}
+
+/**
+ * Reinstall the explorer agent file.
+ * Forces a fresh write of the agent definition, overwriting any existing file.
+ * Called on session_start to ensure the agent definition is always current.
+ */
+export function reinstallExplorerAgent(config: ExplorerAgentConfig): string | null {
+  // First remove the existing file to ensure a clean state
+  removeExplorerAgent();
+  // Then create a fresh one
+  return ensureExplorerAgent(config);
 }
 
 // ── Subagent library detection ──────────────────────────────────────────

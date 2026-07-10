@@ -33,6 +33,8 @@ import { registerCommands } from "./commands.js";
 import { loadConfig } from "./config.js";
 import {
   ensureExplorerAgent,
+  reinstallExplorerAgent,
+  removeExplorerAgent,
   isTintinwebSubagentsAvailable,
   isNicobailonSubagentsAvailable,
 } from "./explorer-agent.js";
@@ -67,6 +69,7 @@ export default function (pi: ExtensionAPI) {
   // ---- Explorer agent file (write early so agent def exists) ----
   // In subagent child processes (PI_SUBAGENT_CHILD=1), skip the registration
   // log — the agent file is written by the parent, and the warning is noise.
+  // Note: session_start will reinstall this to ensure it's always current.
   const isSubagentChild = process.env.PI_SUBAGENT_CHILD === "1";
   const explorerPath = ensureExplorerAgent({
     model: config.explorer.model,
@@ -90,12 +93,24 @@ export default function (pi: ExtensionAPI) {
     config = loadConfig(ctx.cwd);
     enabled = config.general.enabled;
 
-    // Ensure explorer agent file exists (path may have changed)
-    ensureExplorerAgent({
+    // Reinstall explorer agent file to ensure it's always current
+    // This handles config changes, extension updates, and edge cases
+    const explorerPath = reinstallExplorerAgent({
       model: config.explorer.model,
       thinking: config.explorer.thinking,
       maxTurns: config.explorer.max_turns,
     });
+
+    if (explorerPath && !isSubagentChild) {
+      console.warn(
+        `[codebase-reader] Explorer agent reinstalled at ${explorerPath}`,
+      );
+    }
+  });
+
+  // Clean up explorer agent on session shutdown
+  pi.on("session_shutdown", async () => {
+    removeExplorerAgent();
   });
 
   // Detect subagents on session start (extensions are all loaded by then).

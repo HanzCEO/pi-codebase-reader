@@ -17,6 +17,8 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import {
   ensureExplorerAgent,
   updateExplorerAgent,
+  removeExplorerAgent,
+  reinstallExplorerAgent,
   isTintinwebSubagentsAvailable,
   isNicobailonSubagentsAvailable,
   detectSubagentLibrary,
@@ -96,11 +98,11 @@ describe("explorer-agent", () => {
 
       // System prompt body
       assert.ok(
-        content.includes("code exploration and bug-localization specialist"),
+        content.includes("Code exploration & bug-localization specialist"),
         "system prompt should describe the role",
       );
       assert.ok(
-        content.includes("Read specific line ranges"),
+        content.includes("Read line ranges"),
         "system prompt should list responsibilities",
       );
     });
@@ -329,6 +331,74 @@ describe("explorer-agent", () => {
 
     it("formats null as 'none'", () => {
       assert.equal(formatSubagentLibrary(null), "none");
+    });
+  });
+
+  // ── removeExplorerAgent ──────────────────────────────────────────────
+
+  describe("removeExplorerAgent", () => {
+    it("removes the explorer.md file", () => {
+      // First create the file
+      ensureExplorerAgent({
+        model: "test-model",
+        thinking: "high",
+        maxTurns: 50,
+      });
+
+      const agentsDir = join(getAgentDir(), "agents");
+      const mdPath = join(agentsDir, "explorer.md");
+      assert.ok(existsSync(mdPath), "file should exist before removal");
+
+      const result = removeExplorerAgent();
+      assert.equal(result, true, "should return true on success");
+      assert.ok(!existsSync(mdPath), "file should be removed");
+    });
+
+    it("returns true even when file doesn't exist", () => {
+      const agentsDir = join(getAgentDir(), "agents");
+      const mdPath = join(agentsDir, "explorer.md");
+      if (existsSync(mdPath)) {
+        rmSync(mdPath, { force: true });
+      }
+
+      const result = removeExplorerAgent();
+      assert.equal(result, true, "should return true even if file doesn't exist");
+    });
+  });
+
+  // ── reinstallExplorerAgent ──────────────────────────────────────────
+
+  describe("reinstallExplorerAgent", () => {
+    it("removes and recreates the explorer.md file", () => {
+      // First create the file with old config
+      ensureExplorerAgent({
+        model: "old-model",
+        thinking: "low",
+        maxTurns: 30,
+      });
+
+      const agentsDir = join(getAgentDir(), "agents");
+      const mdPath = join(agentsDir, "explorer.md");
+      assert.ok(existsSync(mdPath), "file should exist before reinstall");
+
+      // Verify old content
+      const oldContent = readFileSync(mdPath, "utf-8");
+      assert.ok(oldContent.includes("model: old-model"), "should have old model");
+
+      // Reinstall with new config
+      const result = reinstallExplorerAgent({
+        model: "new-model",
+        thinking: "high",
+        maxTurns: 100,
+      });
+
+      assert.ok(result, "should return a non-null path");
+      assert.ok(existsSync(result!), "file should exist after reinstall");
+
+      // Verify new content
+      const newContent = readFileSync(result!, "utf-8");
+      assert.ok(newContent.includes("model: new-model"), "should have new model");
+      assert.ok(!newContent.includes("model: old-model"), "should not have old model");
     });
   });
 });

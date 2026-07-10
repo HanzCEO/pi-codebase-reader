@@ -30,6 +30,8 @@ import {
 } from "./config.js";
 import {
   updateExplorerAgent,
+  reinstallExplorerAgent,
+  removeExplorerAgent,
   isTintinwebSubagentsAvailable,
   isNicobailonSubagentsAvailable,
   detectSubagentLibrary,
@@ -638,6 +640,71 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
         `  Locations: ${findingData.locations.length} location(s)\n`,
         "info",
       );
+    },
+  });
+
+  // ---- /codebase-reader-explorer ----
+
+  pi.registerCommand("codebase-reader-explorer", {
+    description:
+      "Manage the Explorer subagent. " +
+      "Usage: /codebase-reader-explorer [reinstall|uninstall]. " +
+      "Without arguments, shows the current status.",
+    handler: async (args, ctx) => {
+      const arg = args?.trim().toLowerCase();
+
+      if (arg === "reinstall") {
+        const config = deps.getConfig();
+        const explorerPath = reinstallExplorerAgent({
+          model: config.explorer.model,
+          thinking: config.explorer.thinking,
+          maxTurns: config.explorer.max_turns,
+        });
+
+        if (explorerPath) {
+          ctx.ui.notify(
+            `${ctx.ui.theme.fg("success", "✓")} Explorer agent reinstalled at ${explorerPath}`,
+            "info",
+          );
+        } else {
+          ctx.ui.notify(
+            `${ctx.ui.theme.fg("error", "✗")} Failed to reinstall Explorer agent`,
+            "error",
+          );
+        }
+      } else if (arg === "uninstall") {
+        const success = removeExplorerAgent();
+        if (success) {
+          ctx.ui.notify(
+            `${ctx.ui.theme.fg("success", "✓")} Explorer agent uninstalled`,
+            "info",
+          );
+        } else {
+          ctx.ui.notify(
+            `${ctx.ui.theme.fg("error", "✗")} Failed to uninstall Explorer agent`,
+            "error",
+          );
+        }
+      } else {
+        // Show status
+        const subagentLib = detectSubagentLibrary();
+        const libName = formatSubagentLibrary(subagentLib);
+        const config = deps.getConfig();
+
+        ctx.ui.notify(
+          `Explorer Subagent Status:\n` +
+          `  Model: ${ctx.ui.theme.fg("accent", config.explorer.model)}\n` +
+          `  Thinking: ${ctx.ui.theme.fg("accent", config.explorer.thinking)}\n` +
+          `  Max turns: ${ctx.ui.theme.fg("accent", String(config.explorer.max_turns))}\n` +
+          `  Subagent library: ${ctx.ui.theme.fg("accent", libName)}\n\n` +
+          `Commands:\n` +
+          `  ${ctx.ui.theme.fg("accent", "/codebase-reader-explorer reinstall")} — Reinstall the explorer agent\n` +
+          `  ${ctx.ui.theme.fg("accent", "/codebase-reader-explorer uninstall")} — Remove the explorer agent\n\n` +
+          `Note: The explorer agent is automatically reinstalled on each session start.\n` +
+          `It is automatically removed when the session ends.`,
+          "info",
+        );
+      }
     },
   });
 }
