@@ -35,9 +35,6 @@ import {
   ensureExplorerAgent,
   isTintinwebSubagentsAvailable,
   isNicobailonSubagentsAvailable,
-  detectSubagentLibrary,
-  formatSubagentLibrary,
-  type SubagentLibrary,
 } from "./explorer-agent.js";
 import { registerReadTool } from "./read-tool.js";
 import { registerRepotreeTool, registerConnectedTreeTool } from "./sherloc/tools.js";
@@ -68,13 +65,16 @@ export default function (pi: ExtensionAPI) {
   }
 
   // ---- Explorer agent file (write early so agent def exists) ----
+  // In subagent child processes (PI_SUBAGENT_CHILD=1), skip the registration
+  // log — the agent file is written by the parent, and the warning is noise.
+  const isSubagentChild = process.env.PI_SUBAGENT_CHILD === "1";
   const explorerPath = ensureExplorerAgent({
     model: config.explorer.model,
     thinking: config.explorer.thinking,
     maxTurns: config.explorer.max_turns,
   });
 
-  if (explorerPath) {
+  if (explorerPath && !isSubagentChild) {
     console.warn(
       `[codebase-reader] Explorer agent registered at ${explorerPath}`,
     );
@@ -98,13 +98,14 @@ export default function (pi: ExtensionAPI) {
     });
   });
 
-  // Detect subagents on session start (extensions are all loaded by then)
+  // Detect subagents on session start (extensions are all loaded by then).
+  // Skip detection in subagent child processes — the subagent library is never
+  // loaded there (pi-subagents skips init when PI_SUBAGENT_CHILD=1), so the
+  // "No subagent library detected" warning would be confusing noise.
   pi.on("session_start", async () => {
+    const isSubagentChild = process.env.PI_SUBAGENT_CHILD === "1";
     const tintinweb = isTintinwebSubagentsAvailable();
     const nicobailon = isNicobailonSubagentsAvailable();
-    const detectedLib = config.subagent?.library
-      ? (config.subagent.library as SubagentLibrary)
-      : detectSubagentLibrary();
 
     if (tintinweb) {
       console.warn(
@@ -114,7 +115,7 @@ export default function (pi: ExtensionAPI) {
       console.warn(
         "[codebase-reader] pi-subagents (nicobailon) available — Explorer agent ready (SHERLOC tools: repo_tree, connected_tree)",
       );
-    } else {
+    } else if (!isSubagentChild) {
       const hint = config.subagent?.library
         ? ` (configured: ${config.subagent.library})`
         : "";
