@@ -84,11 +84,17 @@ describe("detectLanguage", () => {
     assert.equal(detectLanguage("file.Js"), "javascript");
   });
 
-  // ── Unknown / unsupported ─────────────────────────────────────────
+  // ── Markdown ────────────────────────────────────────────────────────
 
-  it("returns null for markdown files", () => {
-    assert.equal(detectLanguage("README.md"), null);
+  it("detects markdown for .md files", () => {
+    assert.equal(detectLanguage("README.md"), "markdown");
   });
+
+  it("detects markdown for .markdown files", () => {
+    assert.equal(detectLanguage("docs.markdown"), "markdown");
+  });
+
+  // ── Unknown / unsupported ─────────────────────────────────────────
 
   it("returns null for CSS files", () => {
     assert.equal(detectLanguage("styles.css"), null);

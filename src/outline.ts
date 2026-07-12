@@ -31,12 +31,6 @@ export interface OutlineOptions {
   filePath: string;
   /** Display language name. */
   languageName?: string;
-  /** File content lines for code previews (optional). */
-  fileLines?: string[];
-  /** Whether to include code previews in the outline. */
-  includePreviews?: boolean;
-  /** Number of lines to preview per symbol (default: 3). */
-  previewLines?: number;
 }
 
 /** Rendered outline result. */
@@ -62,13 +56,9 @@ export function generateOutline(
   const { thresholdTokens, totalLines, totalTokens, filePath, languageName } =
     options;
 
-  const includePreviews = options.includePreviews !== false && options.fileLines;
-  const fileLines = options.fileLines;
-  const previewLines = options.previewLines ?? 3;
-
   // Try depths from unlimited down to 1
   for (let depth = options.maxDepth; depth >= 1; depth--) {
-    const rendered = renderOutline(symbols, depth, totalLines, totalTokens, filePath, languageName, fileLines, includePreviews, previewLines);
+    const rendered = renderOutline(symbols, depth, totalLines, totalTokens, filePath, languageName);
     const tokens = estimateOutlineTokens(rendered);
 
     if (tokens <= thresholdTokens || depth === 1) {
@@ -77,7 +67,7 @@ export function generateOutline(
   }
 
   // Fallback: depth 1
-  const rendered = renderOutline(symbols, 1, totalLines, totalTokens, filePath, languageName, fileLines, includePreviews, previewLines);
+  const rendered = renderOutline(symbols, 1, totalLines, totalTokens, filePath, languageName);
   return {
     outline: rendered,
     depth: 1,
@@ -94,9 +84,6 @@ function renderOutline(
   totalTokens: number,
   filePath: string,
   languageName?: string,
-  fileLines?: string[],
-  includePreviews?: boolean,
-  previewLines: number = 3,
 ): string {
   const lines: string[] = [];
 
@@ -112,7 +99,7 @@ function renderOutline(
     return lines.join("\n");
   }
 
-  renderSymbolList(symbols, 0, maxDepth, "", lines, fileLines, includePreviews, previewLines);
+  renderSymbolList(symbols, 0, maxDepth, "", lines);
 
   // Footer hint
   if (maxDepth < 10) {
@@ -131,9 +118,6 @@ function renderSymbolList(
   maxDepth: number,
   prefix: string,
   lines: string[],
-  fileLines?: string[],
-  includePreviews?: boolean,
-  previewLinesCount: number = 3,
 ): void {
   for (let i = 0; i < symbols.length; i++) {
     const symbol = symbols[i];
@@ -144,34 +128,13 @@ function renderSymbolList(
     const symbolLine = formatSymbolLine(symbol, connector, depth);
     lines.push(prefix + symbolLine);
 
-    // Add code preview if enabled and we have file lines
-    if (includePreviews && fileLines && symbol.startLine <= symbol.endLine) {
-      const previewStart = symbol.startLine - 1; // Convert to 0-indexed
-      const previewEnd = Math.min(previewStart + previewLinesCount, symbol.endLine);
-      const preview = fileLines.slice(previewStart, previewEnd);
-      
-      if (preview.length > 0) {
-        const previewPrefix = childPrefix;
-        lines.push(`${previewPrefix}\`\`\``);
-        for (const pl of preview) {
-          // Trim long lines and add prefix
-          const trimmed = pl.length > 60 ? pl.slice(0, 57) + "..." : pl;
-          lines.push(`${previewPrefix}${trimmed}`);
-        }
-        if (previewEnd < symbol.endLine) {
-          lines.push(`${previewPrefix}... (${symbol.endLine - symbol.startLine + 1 - previewLinesCount} more lines)`);
-        }
-        lines.push(`${previewPrefix}\`\`\``);
-      }
-    }
-
     // Recurse into children if within depth
     if (
       symbol.children &&
       symbol.children.length > 0 &&
       depth < maxDepth
     ) {
-      renderSymbolList(symbol.children, depth + 1, maxDepth, childPrefix, lines, fileLines, includePreviews, previewLinesCount);
+      renderSymbolList(symbol.children, depth + 1, maxDepth, childPrefix, lines);
     } else if (symbol.children && symbol.children.length > 0 && depth >= maxDepth) {
       // Show child count as hint
       lines.push(

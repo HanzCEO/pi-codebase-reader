@@ -162,9 +162,7 @@ export function registerReadTool(pi: ExtensionAPI, deps: SmartReadDeps): void {
           totalTokens: tokens,
           filePath,
           languageName,
-          fileLines: lines,
-          includePreviews: config.general.include_previews,
-          previewLines: config.general.preview_lines,
+
         });
 
         return textResult(outline);
@@ -255,11 +253,12 @@ async function readFileRange(
 
   const selected = lines.slice(startLine - 1, endLine);
   const result = selected
-    .map((l, i) => `${startLine + i} │ ${l}`)
+    .map((l, i) => `${startLine + i} │${l}`)
     .join("\n");
 
   return textResult(
-    `${displayPath} lines ${startLine}-${endLine} (${selected.length} lines)\n\n${result}`,
+    `📄 ${displayPath} [lines ${startLine}-${endLine}] (${selected.length} lines)\n` +
+    `⚠️  Line numbers shown: do NOT include them in edit oldText — use only the content after "│"\n\n${result}`,
   );
 }
 
@@ -318,7 +317,7 @@ async function readMultipleRanges(
     const selected = lines.slice(range.start - 1, range.end);
     totalSelected += selected.length;
     const block = selected
-      .map((l, i) => `${range.start + i} │ ${l}`)
+      .map((l, i) => `${range.start + i} │${l}`)
       .join("\n");
     sections.push(block);
   }
@@ -334,7 +333,8 @@ async function readMultipleRanges(
     : "";
 
   return textResult(
-    `${displayPath} [${rangeLabels}] (${totalSelected} lines)${mergeNote}\n\n${sections.join("\n\n")}`,
+    `📄 ${displayPath} [${rangeLabels}] (${totalSelected} lines)${mergeNote}\n` +
+    `⚠️  Line numbers shown: do NOT include them in edit oldText — use only the content after "│"\n\n${sections.join("\n\n")}`,
   );
 }
 

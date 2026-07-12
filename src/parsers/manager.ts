@@ -53,6 +53,11 @@ const GRAMMAR_REGISTRY: Record<
     wasm: "tree-sitter-solidity.wasm",
     label: "Solidity",
   },
+  markdown: {
+    package: "markdown",
+    wasm: "markdown.wasm",
+    label: "Markdown",
+  },
 };
 
 /** Map file extensions to grammar keys. */
@@ -69,6 +74,8 @@ const EXTENSION_MAP: Record<string, string> = {
   ".go": "go",
   ".rs": "rust",
   ".sol": "solidity",
+  ".md": "markdown",
+  ".markdown": "markdown",
 };
 
 // ---- Singleton state ----
@@ -129,6 +136,11 @@ export async function parseCode(
   key: string,
   source: string,
 ): Promise<SymbolInfo[]> {
+  // Markdown uses regex-based parsing, not tree-sitter
+  if (key === "markdown") {
+    return extractMarkdown(source);
+  }
+
   await ensureInit();
 
   const lang = await loadLanguage(key);
@@ -162,6 +174,8 @@ function extractSymbols(
       return extractRust(node, source, depth);
     case "solidity":
       return extractSolidity(node, source, depth);
+    case "markdown":
+      return extractMarkdown(source);
     default:
       return [];
   }
@@ -1016,6 +1030,11 @@ export async function parseFileImports(
   key: string,
   source: string,
 ): Promise<ImportInfo[]> {
+  // Markdown uses regex-based parsing, not tree-sitter
+  if (key === "markdown") {
+    return extractMarkdownLinks(source);
+  }
+
   await ensureInit();
 
   const lang = await loadLanguage(key);
@@ -1046,6 +1065,8 @@ function extractImports(
       return extractRustImports(node, source);
     case "solidity":
       return extractSolidityImports(node, source);
+    case "markdown":
+      return extractMarkdownLinks(source);
     default:
       return [];
   }
@@ -1368,6 +1389,200 @@ function extractSolidityImports(node: Node, source: string): ImportInfo[] {
     });
   }
 
+  return results;
+}
+
+// ---- Markdown extraction ----
+
+/**
+ * Extract structural symbols from Markdown content.
+ * Since Markdown doesn't use tree-sitter, we use regex-based parsing.
+ * Extracts headings as symbols, with nested structure based on heading levels.
+ * Code blocks are nested under their parent heading.
+ */
+function extractMarkdown(source: string): SymbolInfo[] {
+  const lines = source.split("\n");
+  const results: SymbolInfo[] = [];
+  
+  // Track heading hierarchy for nesting
+  const stack: SymbolInfo[] = [];
+  
+  // First pass: extract headings and build hierarchy
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const headingMatch = line.match(/^(#{1,6})\s+(.+)$/);
+    
+    if (headingMatch) {
+      const level = headingMatch[1].length;
+      const title = headingMatch[2].trim();
+      const startLine = i + 1; // 1-indexed
+      
+      const symbol: SymbolInfo = {
+        name: title,
+        type: `heading${level}`,
+        startLine,
+        endLine: lines.length, // Will be updated later
+        children: [],
+        detail: `#`.repeat(level),
+      };
+      
+      // Find parent: pop stack until we find a heading with lower level
+      while (stack.length > 0) {
+        const parentLevel = parseInt(stack[stack.length - 1].type?.replace('heading', '') || '0', 10);
+        if (parentLevel >= level) {
+          stack.pop();
+        } else {
+          break;
+        }
+      }
+      
+      // Add to parent or root
+      if (stack.length > 0) {
+        stack[stack.length - 1].children!.push(symbol);
+      } else {
+        results.push(symbol);
+      }
+      
+      stack.push(symbol);
+    }
+  }
+  
+  // Update endLine for each heading: it ends just before the next sibling or parent's next sibling
+  updateEndLines(results, lines.length);
+  
+  // Second pass: extract code blocks and nest them under appropriate headings
+  const codeBlockRegex = /^```(\w+)\s*$/gm; // Only match opening ``` with a language
+  let match;
+  while ((match = codeBlockRegex.exec(source)) !== null) {
+    const language = match[1];
+    const startLine = source.slice(0, match.index).split("\n").length;
+    
+    // Find closing ```
+    const afterMatch = source.slice(match.index + match[0].length);
+    const closingIdx = afterMatch.search(/^```\s*$/m);
+    let endLine = startLine + 1;
+    if (closingIdx !== -1) {
+      endLine = startLine + afterMatch.slice(0, closingIdx).split("\n").length + 1;
+    }
+    
+    const codeBlock: SymbolInfo = {
+      name: `code_block_${language}`,
+      type: "code_block",
+      startLine,
+      endLine,
+      detail: language,
+    };
+    
+    // Find the heading that contains this code block
+    const parent = findParentHeading(results, startLine);
+    if (parent) {
+      parent.children!.push(codeBlock);
+    } else {
+      results.push(codeBlock);
+    }
+  }
+  
+  return results;
+}
+
+/** Update endLine for each heading based on next sibling or parent's next sibling. */
+function updateEndLines(symbols: SymbolInfo[], totalLines: number): void {
+  for (let i = 0; i < symbols.length; i++) {
+    const symbol = symbols[i];
+    
+    // Default: ends at file end
+    symbol.endLine = totalLines;
+    
+    // If there's a next sibling, this heading ends just before it
+    if (i + 1 < symbols.length) {
+      symbol.endLine = symbols[i + 1].startLine - 1;
+    }
+    
+    // Recurse into children
+    if (symbol.children && symbol.children.length > 0) {
+      updateEndLines(symbol.children, symbol.endLine);
+      // The last child's endLine might extend to parent's endLine
+      const lastChild = symbol.children[symbol.children.length - 1];
+      if (lastChild.endLine < symbol.endLine) {
+        lastChild.endLine = symbol.endLine;
+      }
+    }
+  }
+}
+
+/** Find the heading that contains the given line number. */
+function findParentHeading(symbols: SymbolInfo[], line: number): SymbolInfo | null {
+  for (const symbol of symbols) {
+    if (symbol.type?.startsWith("heading")) {
+      // Check if line is within this heading's range
+      if (line >= symbol.startLine && line <= symbol.endLine) {
+        // Try to find a more specific child
+        if (symbol.children && symbol.children.length > 0) {
+          const child = findParentHeading(symbol.children, line);
+          if (child) return child;
+        }
+        return symbol;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Extract links from Markdown content as "imports".
+ * Links to local files are considered imports.
+ */
+function extractMarkdownLinks(source: string): ImportInfo[] {
+  const results: ImportInfo[] = [];
+  const lines = source.split("\n");
+  
+  // Match markdown links: [text](url)
+  const linkRegex = /\[([^\]]+)\]\(([^)]+)\)/g;
+  
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let match;
+    
+    while ((match = linkRegex.exec(line)) !== null) {
+      const linkText = match[1];
+      const url = match[2];
+      
+      // Skip external URLs
+      if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("mailto:")) {
+        continue;
+      }
+      
+      results.push({
+        source: url,
+        names: [linkText],
+        lineNumber: i + 1,
+      });
+    }
+  }
+  
+  // Also extract import-like references: ![alt](image)
+  const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    let match;
+    
+    while ((match = imageRegex.exec(line)) !== null) {
+      const altText = match[1] || "image";
+      const url = match[2];
+      
+      // Skip external URLs
+      if (url.startsWith("http://") || url.startsWith("https://") || url.startsWith("mailto:")) {
+        continue;
+      }
+      
+      results.push({
+        source: url,
+        names: [altText],
+        lineNumber: i + 1,
+      });
+    }
+  }
+  
   return results;
 }
 

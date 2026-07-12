@@ -87,11 +87,11 @@ describe("registerReadTool", () => {
     }
     writeFileSync(join(tmpDir, "large.ts"), largeTsLines.join("\n"), "utf-8");
 
-    const largeMdLines: string[] = [];
+    const largeCssLines: string[] = [];
     for (let i = 1; i <= 250; i++) {
-      largeMdLines.push(`Line number ${i}`);
+      largeCssLines.push(`Line number ${i}`);
     }
-    writeFileSync(join(tmpDir, "large.md"), largeMdLines.join("\n"), "utf-8");
+    writeFileSync(join(tmpDir, "large.css"), largeCssLines.join("\n"), "utf-8");
 
     // Empty file
     writeFileSync(join(tmpDir, "empty.ts"), "", "utf-8");
@@ -168,24 +168,18 @@ describe("registerReadTool", () => {
       "outline header should mention line count",
     );
     // If parsing works, we see function symbols; otherwise empty-symbol notice
-    // With code previews enabled, the outline contains first few lines of each symbol
     // The outline should be structural (contain tree connectors) not raw source
     assert.ok(
       text.includes("├──") || text.includes("└──") || text.includes("(no parseable symbols"),
       "outline should contain tree structure or empty-symbol notice",
     );
-    // Code previews should show the first few lines (wrapped in backticks)
-    assert.ok(
-      text.includes("```"),
-      "outline should contain code previews with backtick fences",
-    );
   });
 
   it("returns a preview for a large unsupported-language file", async () => {
     tool = createTool(true);
-    const text = await executeRead(tool, join(tmpDir, "large.md"), tmpDir);
+    const text = await executeRead(tool, join(tmpDir, "large.css"), tmpDir);
     assert.ok(
-      text.includes("large.md") && text.includes("lines"),
+      text.includes("large.css") && text.includes("lines"),
       "preview should include file name and line count",
     );
     // Should show first lines and last lines

@@ -19,10 +19,6 @@ export interface CodebaseReaderConfig {
     enabled: boolean;
     threshold_tokens: number;
     suggest_similar: boolean;
-    /** Whether to include code previews in outlines (default: true). */
-    include_previews: boolean;
-    /** Number of lines to preview per symbol (default: 3). */
-    preview_lines: number;
   };
   explorer: {
     model: string;
@@ -47,8 +43,6 @@ export const DEFAULT_CONFIG: CodebaseReaderConfig = {
     enabled: true,
     threshold_tokens: 10_000,
     suggest_similar: true,
-    include_previews: true,
-    preview_lines: 3,
   },
   explorer: {
     model: "anthropic/claude-sonnet-4-20250514",

@@ -243,8 +243,6 @@ export function getConfigRaw(cwd: string, scope?: ConfigScope): string {
       enabled: true,
       threshold_tokens: 10_000,
       suggest_similar: true,
-      include_previews: true,
-      preview_lines: 3,
     },
     explorer: {
       model: "anthropic/claude-sonnet-4-20250514",
