@@ -483,4 +483,33 @@ describe("registerReadTool", () => {
     const text = await executeRead(tool, join(tmpDir, "single.ts"), tmpDir);
     assert.ok(text.includes('VERSION = "1.0"'), "should include the single line of content");
   });
+
+  // ── .pi/skills bypass ──────────────────────────────────────────────
+
+  it("returns full content for files matching .pi/skills (no special treatment)", async () => {
+    tool = createTool(true);
+    // Create a large file in .pi/skills that would normally get outlined
+    const skillsDir = join(tmpDir, ".pi", "skills");
+    mkdirSync(skillsDir, { recursive: true });
+    const largeSkillLines: string[] = [];
+    for (let i = 1; i <= 250; i++) {
+      largeSkillLines.push(`export function skill${i}() { return ${i}; }`);
+    }
+    writeFileSync(join(skillsDir, "my-skill.ts"), largeSkillLines.join("\n"), "utf-8");
+
+    const text = await executeRead(tool, join(skillsDir, "my-skill.ts"), tmpDir);
+    // Should return full content, NOT an outline
+    assert.ok(
+      text.includes("skill150()"),
+      ".pi/skills files should return full content, not outline",
+    );
+    assert.ok(
+      text.includes("{ return 150; }"),
+      ".pi/skills files should include raw source body",
+    );
+    assert.ok(
+      !text.includes("├──") && !text.includes("└──"),
+      ".pi/skills files should NOT have tree outline structure",
+    );
+  });
 });

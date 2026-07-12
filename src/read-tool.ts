@@ -106,6 +106,21 @@ export function registerReadTool(pi: ExtensionAPI, deps: SmartReadDeps): void {
         return listDirectory(resolvedPath, filePath);
       }
 
+      // Paths matching .pi/skills get default read behavior (no special treatment)
+      if (resolvedPath.includes('.pi/skills')) {
+        let content: string;
+        try {
+          content = readFileSync(resolvedPath, "utf-8");
+        } catch (err) {
+          return textResult(
+            `Error reading ${filePath}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+        const lines = content.split("\n");
+        const tokens = estimateCodeTokens(content);
+        return fullContentResult(resolvedPath, filePath, content, lines.length, tokens);
+      }
+
       // If ranges is specified, read multiple sections in one call
       if (ranges && ranges.length > 0) {
         return readMultipleRanges(resolvedPath, filePath, ranges);
