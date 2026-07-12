@@ -108,11 +108,6 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
-  // Clean up explorer agent on session shutdown
-  pi.on("session_shutdown", async () => {
-    removeExplorerAgent();
-  });
-
   // Detect subagents on session start (extensions are all loaded by then).
   // Skip detection in subagent child processes — the subagent library is never
   // loaded there (pi-subagents skips init when PI_SUBAGENT_CHILD=1), so the

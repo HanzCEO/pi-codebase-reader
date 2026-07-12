@@ -159,7 +159,7 @@ export function updateExplorerAgent(config: ExplorerAgentConfig): boolean {
 
 /**
  * Remove the explorer.md agent definition file.
- * Called during extension uninstall or session shutdown to clean up.
+ * Called during npm uninstall (via postuninstall script) or manual command.
  */
 export function removeExplorerAgent(): boolean {
   const agentsDir = join(getAgentDir(), "agents");
