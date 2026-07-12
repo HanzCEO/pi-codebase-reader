@@ -230,11 +230,11 @@ function unsupportedLanguageResult(
     `${filePath} — ${lineCount} lines, ~${formatTokenCount(estTokens)} tokens (unsupported language)`,
     ``,
     `First ${head.length} lines:`,
-    ...head.map((l, i) => `${i + 1} │ ${l}`),
+    ...head.map((l) => l),
     tail.length > 0 && lines.length > 30 ? `  ... (${lineCount - head.length - tail.length} more lines)` : "",
     tail.length > 0 && lines.length > 20 ? `Last ${tail.length} lines:` : "",
     ...(tail.length > 0 && lines.length > 20
-      ? tail.map((l, i) => `${lineCount - tail.length + i + 1} │ ${l}`)
+      ? tail.map((l) => l)
       : []),
     ``,
     `Use read with offset/limit to view specific sections.`,
@@ -268,12 +268,11 @@ async function readFileRange(
 
   const selected = lines.slice(startLine - 1, endLine);
   const result = selected
-    .map((l, i) => `${startLine + i} │${l}`)
+    .map((l) => l)
     .join("\n");
 
   return textResult(
-    `📄 ${displayPath} [lines ${startLine}-${endLine}] (${selected.length} lines)\n` +
-    `⚠️  Line numbers shown: do NOT include them in edit oldText — use only the content after "│"\n\n${result}`,
+    `📄 ${displayPath} [lines ${startLine}-${endLine}] (${selected.length} lines)\n\n${result}`,
   );
 }
 
@@ -332,7 +331,7 @@ async function readMultipleRanges(
     const selected = lines.slice(range.start - 1, range.end);
     totalSelected += selected.length;
     const block = selected
-      .map((l, i) => `${range.start + i} │${l}`)
+      .map((l) => l)
       .join("\n");
     sections.push(block);
   }
@@ -348,8 +347,7 @@ async function readMultipleRanges(
     : "";
 
   return textResult(
-    `📄 ${displayPath} [${rangeLabels}] (${totalSelected} lines)${mergeNote}\n` +
-    `⚠️  Line numbers shown: do NOT include them in edit oldText — use only the content after "│"\n\n${sections.join("\n\n")}`,
+    `📄 ${displayPath} [${rangeLabels}] (${totalSelected} lines)${mergeNote}\n\n${sections.join("\n\n")}`,
   );
 }
 
