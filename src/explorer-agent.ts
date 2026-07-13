@@ -159,7 +159,9 @@ export function updateExplorerAgent(config: ExplorerAgentConfig): boolean {
 
 /**
  * Remove the explorer.md agent definition file.
- * Called during npm uninstall (via postuninstall script) or manual command.
+ * Only for manual command use (/codebase-reader-explorer uninstall).
+ * Automatic uninstall on npm uninstall has been removed in favor of
+ * reinstallation on session_start and session_end.
  */
 export function removeExplorerAgent(): boolean {
   const agentsDir = join(getAgentDir(), "agents");

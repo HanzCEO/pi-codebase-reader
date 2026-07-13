@@ -46,7 +46,6 @@
   "files": [
     "dist",
     "src",
-    "scripts",
     "README.md",
     "LICENSE"
   ],
@@ -55,7 +54,6 @@
     "build": "tsc",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run typecheck && npm run build",
-    "postuninstall": "node scripts/postuninstall.mjs",
     "version": "git add -A",
     "postversion": "git push && git push --tags"
   },

@@ -700,8 +700,8 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
           `Commands:\n` +
           `  ${ctx.ui.theme.fg("accent", "/codebase-reader-explorer reinstall")} — Reinstall the explorer agent\n` +
           `  ${ctx.ui.theme.fg("accent", "/codebase-reader-explorer uninstall")} — Remove the explorer agent\n\n` +
-          `Note: The explorer agent is automatically reinstalled on each session start.\n` +
-          `It is automatically removed when the session ends.`,
+          `Note: The explorer agent is automatically reinstalled on every session start and session end.\n` +
+          `This ensures it always reflects the latest configuration and is never stale.`,
           "info",
         );
       }

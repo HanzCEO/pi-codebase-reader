@@ -108,6 +108,23 @@ export default function (pi: ExtensionAPI) {
     }
   });
 
+  pi.on("session_shutdown", async () => {
+    // Reinstall explorer agent on every session end to ensure it's
+    // current for the next session. This replaces any old automatic
+    // uninstall approach — the agent is always refreshed, never removed.
+    const explorerPath = reinstallExplorerAgent({
+      model: config.explorer.model,
+      thinking: config.explorer.thinking,
+      maxTurns: config.explorer.max_turns,
+    });
+
+    if (explorerPath && !isSubagentChild) {
+      console.warn(
+        `[codebase-reader] Explorer agent reinstalled at ${explorerPath}`,
+      );
+    }
+  });
+
   // Detect subagents on session start (extensions are all loaded by then).
   // Skip detection in subagent child processes — the subagent library is never
   // loaded there (pi-subagents skips init when PI_SUBAGENT_CHILD=1), so the
