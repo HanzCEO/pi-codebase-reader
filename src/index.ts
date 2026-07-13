@@ -34,9 +34,6 @@ import { loadConfig } from "./config.js";
 import {
   ensureExplorerAgent,
   reinstallExplorerAgent,
-  removeExplorerAgent,
-  isTintinwebSubagentsAvailable,
-  isNicobailonSubagentsAvailable,
 } from "./explorer-agent.js";
 import { registerReadTool } from "./read-tool.js";
 import { registerRepotreeTool, registerConnectedTreeTool } from "./sherloc/tools.js";
@@ -67,100 +64,33 @@ export default function (pi: ExtensionAPI) {
   }
 
   // ---- Explorer agent file (write early so agent def exists) ----
-  // In subagent child processes (PI_SUBAGENT_CHILD=1), skip the registration
-  // log — the agent file is written by the parent, and the warning is noise.
-  // Note: session_start will reinstall this to ensure it's always current.
-  const isSubagentChild = process.env.PI_SUBAGENT_CHILD === "1";
-  const explorerPath = ensureExplorerAgent({
+  ensureExplorerAgent({
     model: config.explorer.model,
     thinking: config.explorer.thinking,
     maxTurns: config.explorer.max_turns,
   });
 
-  if (explorerPath && !isSubagentChild) {
-    console.warn(
-      `[codebase-reader] Explorer agent registered at ${explorerPath}`,
-    );
-  }
-
   // ---- Register SHERLOC tools ----
   registerRepotreeTool(pi);
   registerConnectedTreeTool(pi);
 
-  // ---- Session lifecycle ----
+  // ---- Session lifecycle — silently refresh agent file ----
   pi.on("session_start", async (_event, ctx) => {
-    // Reload config per session
     config = loadConfig(ctx.cwd);
     enabled = config.general.enabled;
-
-    // Reinstall explorer agent file to ensure it's always current
-    // This handles config changes, extension updates, and edge cases
-    const explorerPath = reinstallExplorerAgent({
+    reinstallExplorerAgent({
       model: config.explorer.model,
       thinking: config.explorer.thinking,
       maxTurns: config.explorer.max_turns,
     });
-
-    if (explorerPath && !isSubagentChild) {
-      console.warn(
-        `[codebase-reader] Explorer agent reinstalled at ${explorerPath}`,
-      );
-    }
   });
 
   pi.on("session_shutdown", async () => {
-    // Reinstall explorer agent on every session end to ensure it's
-    // current for the next session. This replaces any old automatic
-    // uninstall approach — the agent is always refreshed, never removed.
-    const explorerPath = reinstallExplorerAgent({
+    reinstallExplorerAgent({
       model: config.explorer.model,
       thinking: config.explorer.thinking,
       maxTurns: config.explorer.max_turns,
     });
-
-    if (explorerPath && !isSubagentChild) {
-      console.warn(
-        `[codebase-reader] Explorer agent reinstalled at ${explorerPath}`,
-      );
-    }
-  });
-
-  // Detect subagents on session start (extensions are all loaded by then).
-  // Skip detection in subagent child processes — the subagent library is never
-  // loaded there (pi-subagents skips init when PI_SUBAGENT_CHILD=1), so the
-  // "No subagent library detected" warning would be confusing noise.
-  pi.on("session_start", async () => {
-    const isSubagentChild = process.env.PI_SUBAGENT_CHILD === "1";
-    const tintinweb = isTintinwebSubagentsAvailable();
-    const nicobailon = isNicobailonSubagentsAvailable();
-
-    if (tintinweb) {
-      console.warn(
-        "[codebase-reader] @tintinweb/pi-subagents available — Explorer agent ready (SHERLOC tools: repo_tree, connected_tree)",
-      );
-    } else if (nicobailon) {
-      console.warn(
-        "[codebase-reader] pi-subagents (nicobailon) available — Explorer agent ready (SHERLOC tools: repo_tree, connected_tree)",
-      );
-    } else if (!isSubagentChild) {
-      const hint = config.subagent?.library
-        ? ` (configured: ${config.subagent.library})`
-        : "";
-      console.warn(
-        `[codebase-reader] No subagent library detected${hint}. ` +
-        `Install one:\n` +
-        `  pi install npm:@tintinweb/pi-subagents\n` +
-        `  — or —\n` +
-        `  pi install npm:pi-subagents`,
-      );
-    }
-  });
-
-  // ---- @tintinweb/pi-subagents readiness event ----
-  pi.events.on("subagents:ready", () => {
-    console.warn(
-      "[codebase-reader] @tintinweb/pi-subagents ready — Explorer agent ready",
-    );
   });
 
   // ---- Register the smart read tool ----

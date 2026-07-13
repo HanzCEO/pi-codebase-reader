@@ -170,28 +170,30 @@ export function removeExplorerAgent(): boolean {
   try {
     if (existsSync(mdPath)) {
       unlinkSync(mdPath);
-      console.warn(`[codebase-reader] Explorer agent removed: ${mdPath}`);
     }
     return true;
-  } catch (err) {
-    console.warn(
-      `[codebase-reader] Failed to remove explorer agent:`,
-      err instanceof Error ? err.message : String(err),
-    );
+  } catch {
     return false;
   }
 }
 
 /**
  * Reinstall the explorer agent file.
- * Forces a fresh write of the agent definition, overwriting any existing file.
- * Called on session_start to ensure the agent definition is always current.
+ * Overwrites the agent definition file to ensure it's always current.
+ * Called on session_start/session_shutdown to refresh the definition.
  */
 export function reinstallExplorerAgent(config: ExplorerAgentConfig): string | null {
-  // First remove the existing file to ensure a clean state
-  removeExplorerAgent();
-  // Then create a fresh one
-  return ensureExplorerAgent(config);
+  const agentsDir = join(getAgentDir(), "agents");
+  const mdPath = join(agentsDir, "explorer.md");
+
+  try {
+    mkdirSync(agentsDir, { recursive: true });
+    writeFileSync(mdPath, explorerAgentMd(config), "utf-8");
+    return mdPath;
+  } catch (err) {
+    console.warn(`[codebase-reader] Failed to write explorer agent:`, err instanceof Error ? err.message : String(err));
+    return null;
+  }
 }
 
 // ── Subagent library detection ──────────────────────────────────────────
