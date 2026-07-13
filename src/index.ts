@@ -85,13 +85,9 @@ export default function (pi: ExtensionAPI) {
     });
   });
 
-  pi.on("session_shutdown", async () => {
-    reinstallExplorerAgent({
-      model: config.explorer.model,
-      thinking: config.explorer.thinking,
-      maxTurns: config.explorer.max_turns,
-    });
-  });
+  // pi.on("session_shutdown", ...) intentionally removed:
+  // Previously the agent was reinstalled on every shutdown,
+  // but that caused unwanted side effects when the user exited pi.
 
   // ---- Register the smart read tool ----
   registerReadTool(pi, { isEnabled, getConfig });
