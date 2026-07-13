@@ -55,6 +55,7 @@ read("large-file.ts", ranges: [{offset:100,limit:50}, {offset:300,limit:30}]) â†
 | `/codebase-reader-subagent [library\|auto] [local\|global]` | Show subagent library status or configure preference (`@tintinweb/pi-subagents`, `pi-subagents`, or `auto`). Default scope: global |
 | `/codebase-reader-settings [global\|local]` | Edit the TOML configuration file (default: global; use `local` for project-level `.pi/codebase-reader.toml`) |
 | `/codebase-reader-explorer [reinstall\|uninstall]` | Manage the Explorer subagent. `reinstall` forces a fresh write; `uninstall` removes the agent file. Without arguments, shows status. |
+| `/build-context <mission_brief>` | Paraphrase a mission brief via the session model (tools restricted to `subagent` only) then delegate to the Explorer subagent for structured exploration |
 
 ## Installation
 

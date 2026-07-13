@@ -707,5 +707,70 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
       }
     },
   });
+
+  // ---- /build-context ----
+
+  pi.registerCommand("build-context", {
+    description:
+      "Paraphrase a mission brief and delegate it to the Explorer subagent. " +
+      "Tools are temporarily restricted to subagent-only so the model cannot wander. " +
+      "Usage: /build-context <mission_brief>",
+    handler: async (args, ctx) => {
+      const missionBrief = args?.trim();
+      if (!missionBrief) {
+        ctx.ui.notify(
+          "Usage: /build-context <mission_brief>\n" +
+          "Provide a mission brief to be paraphrased and explored.",
+          "error",
+        );
+        return;
+      }
+
+      // Check subagent library availability
+      const subagentLib = detectSubagentLibrary();
+      if (!subagentLib) {
+        ctx.ui.notify(
+          "No subagent library detected. Install one:\n" +
+          "  pi install npm:@tintinweb/pi-subagents\n" +
+          "  pi install npm:pi-subagents",
+          "error",
+        );
+        return;
+      }
+
+      const currentModel = ctx.model
+        ? `${(ctx.model as any).provider}/${(ctx.model as any).id}`
+        : "session model";
+
+      ctx.ui.notify(
+        `${ctx.ui.theme.fg("accent", ctx.ui.theme.bold("Build Context → Explorer"))}` +
+        `\nParaphrasing via ${ctx.ui.theme.fg("accent", currentModel)}` +
+        `\nSubagent: ${ctx.ui.theme.fg("accent", formatSubagentLibrary(subagentLib))}` +
+        `\nMission: ${ctx.ui.theme.fg("dim", missionBrief.slice(0, 120))}${missionBrief.length > 120 ? "…" : ""}`,
+        "info",
+      );
+
+      // Save and restrict active tools — remove everything except subagent
+      // so the model cannot wander around the codebase
+      const savedTools = pi.getActiveTools();
+      pi.setActiveTools(["subagent"]);
+
+      try {
+        // Send a concise two-step instruction.
+        // With only subagent tool available, the model must paraphrase then delegate.
+        pi.sendUserMessage(
+          `[build-context] Paraphrase this mission brief for the Explorer subagent (code structure & bug-localization specialist):\n\n` +
+          `${missionBrief}\n\n` +
+          `First, output your paraphrased version. Then immediately call subagent({ agent: "explorer", task: "<paraphrased>", context: "fresh" }).`,
+        );
+
+        // Wait for the agent to complete both steps (paraphrase + subagent delegation)
+        await ctx.waitForIdle();
+      } finally {
+        // Restore original tools
+        pi.setActiveTools(savedTools);
+      }
+    },
+  });
 }
 
