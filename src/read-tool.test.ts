@@ -65,6 +65,9 @@ describe("registerReadTool", () => {
         ...defaults,
         general: { ...defaults.general, enabled, suggest_similar: suggestSimilar },
       }),
+      // Explicitly set toolName to "read" for deterministic test behavior,
+      // regardless of whether pi-hashline-edit-pro is installed on the test machine.
+      toolName: "read",
     };
 
     let registered: any;

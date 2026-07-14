@@ -11,9 +11,10 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { Type } from "@sinclair/typebox";
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { estimateCodeTokens, formatTokenCount } from "./token-estimate.js";
 import { suggestSimilarPaths } from "./fuzzy-suggest.js";
 import { generateOutline } from "./outline.js";
@@ -22,33 +23,106 @@ import type { CodebaseReaderConfig } from "./types.js";
 
 const LARGE_FILE_LINES = 200; // files over this many lines get outline treatment
 
+// ── pi-hashline-edit-pro detection ──────────────────────────────────────
+
+/**
+ * Detect whether pi-hashline-edit-pro is installed globally or locally.
+ *
+ * Checks:
+ * 1. Global pi agent npm: ~/.pi/agent/npm/node_modules/pi-hashline-edit-pro
+ * 2. Sibling package: resolved from this package's own location
+ *    (covers project-local .pi/npm/node_modules/ when installed side-by-side)
+ */
+export function detectHashlineEditPro(): boolean {
+  try {
+    const agentDir = getAgentDir();
+    const globalPath = join(agentDir, "npm", "node_modules", "pi-hashline-edit-pro");
+    if (existsSync(globalPath)) return true;
+  } catch {
+    // getAgentDir may throw in some contexts
+  }
+
+  // Check as a sibling package (project-local installs)
+  try {
+    const ownDir = dirname(fileURLToPath(import.meta.url));
+    // Navigate up: dist -> pi-codebase-reader -> node_modules -> pi-hashline-edit-pro
+    const siblingPath = resolve(ownDir, "..", "..", "pi-hashline-edit-pro");
+    if (existsSync(siblingPath)) return true;
+  } catch {
+    // fileURLToPath may fail in non-file URL contexts
+  }
+
+  return false;
+}
+
+let _detectionCache: boolean | null = null;
+
+/** Cache the result of detectHashlineEditPro() for the lifetime of the process. */
+function isHashlineEditProPresent(): boolean {
+  if (_detectionCache === null) {
+    _detectionCache = detectHashlineEditPro();
+  }
+  return _detectionCache;
+}
+
 export interface SmartReadDeps {
   isEnabled: () => boolean;
   getConfig: () => CodebaseReaderConfig;
+  /** Override the tool name. If unset, auto-detects pi-hashline-edit-pro. */
+  toolName?: string;
 }
 
 export function registerReadTool(pi: ExtensionAPI, deps: SmartReadDeps): void {
+  const hasHashlineEditPro = deps.toolName !== undefined
+    ? deps.toolName !== "read"
+    : isHashlineEditProPresent();
+
+  const toolName = hasHashlineEditPro ? "short_read" : "read";
+  const label = hasHashlineEditPro ? "Short Read" : "Read";
+
+  const descriptionBase =
+    "Read a file, read a directory, or view a file's structural outline. " +
+    "For files with a supported language (JavaScript, TypeScript, TSX, Python, Go, Rust, Solidity): " +
+    "small files (<200 lines) return full content; large files return an AST structural outline " +
+    "with line ranges and code previews for drill-down. " +
+    "For unsupported file types: returns a line-count preview with first/last lines. " +
+    "For directories: returns a formatted listing with sizes and modified times. " +
+    "Use offset/limit to read specific line ranges, or ranges (array) to read multiple non-contiguous sections in one call. " +
+    "Adjacent ranges are automatically merged to reduce tool calls. " +
+    "When a file is not found, similar path suggestions are offered automatically.";
+
+  const description = hasHashlineEditPro
+    ? descriptionBase +
+      " NOTE: renamed to short_read because pi-hashline-edit-pro provides its own hash-anchored read tool."
+    : descriptionBase;
+
+  const snippet = hasHashlineEditPro
+    ? "Read files with smart AST outlining for large codebases; list directories (short_read — use this for structural outlines, or 'read' for hashline-anchored output)"
+    : "Read files with smart AST outlining for large codebases; list directories";
+
+  const guidelines = hasHashlineEditPro
+    ? [
+        "Use the regular 'read' tool (provided by pi-hashline-edit-pro) for line-level reading with hash anchors — this is the primary read tool.",
+        "Use 'short_read' for structural AST outlines of large codebases. For large files in supported languages, you'll get a structural outline with code previews instead of full content — request specific line ranges with offset/limit to drill down, or use ranges for multiple sections in one call.",
+        "Reading a directory with short_read returns a listing of its contents with file sizes and modified times.",
+        "For unsupported file types in short_read, a preview of the first/last lines with line count is shown.",
+        "When a file path doesn't exist, similar path suggestions are offered automatically.",
+        "When you need multiple sections, use the ranges parameter to read them all in one call — this saves tokens compared to multiple separate reads.",
+      ]
+    : [
+        "Use smart read for all file reading. For large files in supported languages, you'll get a structural outline with code previews instead of full content — request specific line ranges with offset/limit to drill down, or use ranges for multiple sections in one call.",
+        "Reading a directory path returns a listing of its contents with file sizes and modified times.",
+        "For unsupported file types, a preview of the first/last lines with line count is shown.",
+        "When a file path doesn't exist, similar path suggestions are offered automatically.",
+        "When you need multiple sections, use the ranges parameter to read them all in one call — this saves tokens compared to multiple separate reads.",
+      ];
+
   pi.registerTool({
-    name: "read",
-    label: "Read",
-    description:
-      "Read a file, read a directory, or view a file's structural outline. " +
-      "For files with a supported language (JavaScript, TypeScript, TSX, Python, Go, Rust, Solidity): " +
-      "small files (<200 lines) return full content; large files return an AST structural outline " +
-      "with line ranges and code previews for drill-down. " +
-      "For unsupported file types: returns a line-count preview with first/last lines. " +
-      "For directories: returns a formatted listing with sizes and modified times. " +
-      "Use offset/limit to read specific line ranges, or ranges (array) to read multiple non-contiguous sections in one call. " +
-      "Adjacent ranges are automatically merged to reduce tool calls. " +
-      "When a file is not found, similar path suggestions are offered automatically.",
-    promptSnippet: "Read files with smart AST outlining for large codebases; list directories",
-    promptGuidelines: [
-      "Use smart read for all file reading. For large files in supported languages, you'll get a structural outline with code previews instead of full content — request specific line ranges with offset/limit to drill down, or use ranges for multiple sections in one call.",
-      "Reading a directory path returns a listing of its contents with file sizes and modified times.",
-      "For unsupported file types, a preview of the first/last lines with line count is shown.",
-      "When a file path doesn't exist, similar path suggestions are offered automatically.",
-      "When you need multiple sections, use the ranges parameter to read them all in one call — this saves tokens compared to multiple separate reads.",
-    ],
+    name: toolName,
+    label,
+    description,
+    promptSnippet: snippet,
+    promptGuidelines: guidelines,
     parameters: Type.Object({
       path: Type.String({
         description: "Path to the file or directory to read.",
