@@ -37,6 +37,7 @@ import {
   detectSubagentLibrary,
   formatSubagentLibrary,
 } from "./explorer-agent.js";
+import { detectHashlineEditPro } from "./read-tool.js";
 import type { CodebaseReaderConfig } from "./types.js";
 import { resolve } from "node:path";
 import { readFileSync } from "node:fs";
@@ -375,6 +376,7 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
         model: selected,
         thinking: config.explorer.thinking,
         maxTurns: config.explorer.max_turns,
+        useShortRead: detectHashlineEditPro(),
       });
 
       const location = scope === "project" ? "local" : "global";
@@ -532,6 +534,7 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
           model: config.explorer.model,
           thinking: config.explorer.thinking,
           maxTurns: config.explorer.max_turns,
+          useShortRead: detectHashlineEditPro(),
         });
 
         const location =
@@ -659,6 +662,7 @@ export function registerCommands(pi: ExtensionAPI, deps: CommandDeps): void {
           model: config.explorer.model,
           thinking: config.explorer.thinking,
           maxTurns: config.explorer.max_turns,
+          useShortRead: detectHashlineEditPro(),
         });
 
         if (explorerPath) {

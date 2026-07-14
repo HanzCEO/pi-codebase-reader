@@ -124,6 +124,46 @@ describe("explorer-agent", () => {
     });
   });
 
+  describe("useShortRead", () => {
+    it("includes short_read in frontmatter when useShortRead is true", () => {
+      const resultPath = ensureExplorerAgent({
+        model: "test-model",
+        thinking: "high",
+        maxTurns: 50,
+        useShortRead: true,
+      });
+      assert.ok(resultPath);
+      const content = readFileSync(resultPath!, "utf-8");
+      assert.ok(
+        content.includes("tools: short_read, read,"),
+        "frontmatter should include short_read when useShortRead is true",
+      );
+      assert.ok(
+        content.includes("**short_read**: File content; AST outline; offset/limit."),
+        "system prompt should reference short_read when useShortRead is true",
+      );
+    });
+
+    it("does NOT include short_read in frontmatter when useShortRead is false", () => {
+      const resultPath = ensureExplorerAgent({
+        model: "test-model",
+        thinking: "high",
+        maxTurns: 50,
+        useShortRead: false,
+      });
+      assert.ok(resultPath);
+      const content = readFileSync(resultPath!, "utf-8");
+      assert.ok(
+        content.includes("tools: read,") && !content.includes("short_read"),
+        "frontmatter should NOT include short_read when useShortRead is false",
+      );
+      assert.ok(
+        content.includes("**read**: File content; AST outline; offset/limit."),
+        "system prompt should reference read when useShortRead is false",
+      );
+    });
+  });
+
   // ── updateExplorerAgent ─────────────────────────────────────────────
 
   describe("updateExplorerAgent", () => {

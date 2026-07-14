@@ -35,7 +35,7 @@ import {
   ensureExplorerAgent,
   reinstallExplorerAgent,
 } from "./explorer-agent.js";
-import { registerReadTool } from "./read-tool.js";
+import { registerReadTool, detectHashlineEditPro } from "./read-tool.js";
 import { registerRepotreeTool, registerConnectedTreeTool } from "./sherloc/tools.js";
 import type { CodebaseReaderConfig } from "./types.js";
 
@@ -64,10 +64,12 @@ export default function (pi: ExtensionAPI) {
   }
 
   // ---- Explorer agent file (write early so agent def exists) ----
+  const useShortRead = detectHashlineEditPro();
   ensureExplorerAgent({
     model: config.explorer.model,
     thinking: config.explorer.thinking,
     maxTurns: config.explorer.max_turns,
+    useShortRead,
   });
 
   // ---- Register SHERLOC tools ----
@@ -82,6 +84,7 @@ export default function (pi: ExtensionAPI) {
       model: config.explorer.model,
       thinking: config.explorer.thinking,
       maxTurns: config.explorer.max_turns,
+      useShortRead,
     });
   });
 

@@ -61,6 +61,8 @@ export interface ExplorerAgentConfig {
   model: string;
   thinking: string;
   maxTurns: number;
+  /** When true, register the tool as `short_read` instead of `read` (for pi-hashline-edit-pro compatibility). */
+  useShortRead?: boolean;
 }
 
 /** Parsed file info used to decide read strategy. */

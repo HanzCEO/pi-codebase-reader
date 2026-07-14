@@ -48,11 +48,16 @@ const NICOBALLON_RUNTIME_KEY = "__piSubagentRuntimeCleanup";
  * Both ignore unknown fields, so we can safely include all of them.
  */
 function explorerAgentMd(config: ExplorerAgentConfig): string {
+  const readToolName = config.useShortRead ? "short_read" : "read";
+  const tools = config.useShortRead
+    ? "short_read, read, grep, find, bash, ls, repo_tree, connected_tree"
+    : "read, grep, find, bash, ls, repo_tree, connected_tree";
+
   return `---
 name: explorer
 description: Explorer — code structure, bug-localization
 display_name: Explorer
-tools: read, grep, find, bash, ls, repo_tree, connected_tree
+tools: ${tools}
 model: ${config.model}
 thinking: ${config.thinking}
 max_turns: ${config.maxTurns}
@@ -94,7 +99,7 @@ Given bug/issue:
 </locations>
 
 ## Tools
-- **read**: File content; AST outline; offset/limit.
+- **${readToolName}**: File content; AST outline; offset/limit.
 - **grep**: Search for patterns across the codebase. Use this DIRECTLY, not via bash.
 - **find**: File locator.
 - **bash**: Shell commands (use only when grep/find cannot accomplish the task).
@@ -104,8 +109,8 @@ Given bug/issue:
 
 ## Critical: Use grep tool, not bash grep
 The \`grep\` tool is a dedicated pi tool that returns structured results. Always use it directly:
-- ✅ grep(pattern: "func.*Create", path: "core/vm")
-- ❌ bash(command: "grep -rn 'func.*Create' core/vm")
+- ✅ grep(pattern: \"func.*Create\", path: \"core/vm\")
+- ❌ bash(command: \"grep -rn 'func.*Create' core/vm\")
 
 Structured analysis for parent. Cite code constructs, paths, lines.
 `;
