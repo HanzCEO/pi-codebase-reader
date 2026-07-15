@@ -50,7 +50,7 @@ const NICOBALLON_RUNTIME_KEY = "__piSubagentRuntimeCleanup";
 function explorerAgentMd(config: ExplorerAgentConfig): string {
   const readToolName = config.useShortRead ? "short_read" : "read";
   const tools = config.useShortRead
-    ? "short_read, read, grep, find, bash, ls, repo_tree, connected_tree"
+    ? "short_read, grep, find, bash, ls, repo_tree, connected_tree"
     : "read, grep, find, bash, ls, repo_tree, connected_tree";
 
   return `---

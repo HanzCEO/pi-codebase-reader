@@ -77,10 +77,13 @@ export function registerReadTool(pi: ExtensionAPI, deps: SmartReadDeps): void {
     ? deps.toolName !== "read"
     : isHashlineEditProPresent();
 
-  const toolName = hasHashlineEditPro ? "short_read" : "read";
-  const label = hasHashlineEditPro ? "Short Read" : "Read";
+  // When hashline-edit-pro is installed, the master agent gets `read` from that extension.
+  // short_read (AST outlining) is not registered for the master agent.
+  if (hasHashlineEditPro) return;
+  const toolName = "read";
+  const label = "Smart Read";
 
-  const descriptionBase =
+  const description =
     "Read a file, read a directory, or view a file's structural outline. " +
     "For files with a supported language (JavaScript, TypeScript, TSX, Python, Go, Rust, Solidity): " +
     "small files (<200 lines) return full content; large files return an AST structural outline " +
@@ -91,31 +94,15 @@ export function registerReadTool(pi: ExtensionAPI, deps: SmartReadDeps): void {
     "Adjacent ranges are automatically merged to reduce tool calls. " +
     "When a file is not found, similar path suggestions are offered automatically.";
 
-  const description = hasHashlineEditPro
-    ? descriptionBase +
-      " NOTE: renamed to short_read because pi-hashline-edit-pro provides its own hash-anchored read tool."
-    : descriptionBase;
+  const snippet = "Read files with smart AST outlining for large codebases; list directories";
 
-  const snippet = hasHashlineEditPro
-    ? "Read files with smart AST outlining for large codebases; list directories (short_read — use this for structural outlines, or 'read' for hashline-anchored output)"
-    : "Read files with smart AST outlining for large codebases; list directories";
-
-  const guidelines = hasHashlineEditPro
-    ? [
-        "Use the regular 'read' tool (provided by pi-hashline-edit-pro) for line-level reading with hash anchors — this is the primary read tool.",
-        "Use 'short_read' for structural AST outlines of large codebases. For large files in supported languages, you'll get a structural outline with code previews instead of full content — request specific line ranges with offset/limit to drill down, or use ranges for multiple sections in one call.",
-        "Reading a directory with short_read returns a listing of its contents with file sizes and modified times.",
-        "For unsupported file types in short_read, a preview of the first/last lines with line count is shown.",
-        "When a file path doesn't exist, similar path suggestions are offered automatically.",
-        "When you need multiple sections, use the ranges parameter to read them all in one call — this saves tokens compared to multiple separate reads.",
-      ]
-    : [
-        "Use smart read for all file reading. For large files in supported languages, you'll get a structural outline with code previews instead of full content — request specific line ranges with offset/limit to drill down, or use ranges for multiple sections in one call.",
-        "Reading a directory path returns a listing of its contents with file sizes and modified times.",
-        "For unsupported file types, a preview of the first/last lines with line count is shown.",
-        "When a file path doesn't exist, similar path suggestions are offered automatically.",
-        "When you need multiple sections, use the ranges parameter to read them all in one call — this saves tokens compared to multiple separate reads.",
-      ];
+  const guidelines = [
+    "Use smart read for all file reading. For large files in supported languages, you'll get a structural outline with code previews instead of full content. Request specific line ranges with offset/limit to drill down, or use ranges for multiple sections in one call.",
+    "Reading a directory path returns a listing of its contents with file sizes and modified times.",
+    "For unsupported file types, a preview of the first/last lines with line count is shown.",
+    "When a file path doesn't exist, similar path suggestions are offered automatically.",
+    "When you need multiple sections, use the ranges parameter to read them all in one call. This saves tokens compared to multiple separate reads.",
+  ];
 
   pi.registerTool({
     name: toolName,
