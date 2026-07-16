@@ -13,6 +13,13 @@ export interface ParseResult {
   symbols: SymbolInfo[];
 }
 
+/** Information about a single import/require statement. */
+export interface ImportInfo {
+  source: string;
+  names: string[];
+  lineNumber: number;
+}
+
 /** Configuration stored in .toml file. */
 export interface CodebaseReaderConfig {
   general: {

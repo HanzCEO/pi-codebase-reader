@@ -7,7 +7,8 @@
 
 import { createRequire } from "node:module";
 import { Parser, Language, type Node } from "web-tree-sitter";
-import type { SymbolInfo } from "../types.js";
+import type { SymbolInfo, ImportInfo } from "../types.js";
+import { extractSmali, extractSmaliImports } from "./smali.js";
 
 // ---- WASM path resolution ----
 
@@ -53,6 +54,11 @@ const GRAMMAR_REGISTRY: Record<
     wasm: "tree-sitter-solidity.wasm",
     label: "Solidity",
   },
+  smali: {
+    package: "tree-sitter-smali",
+    wasm: "tree-sitter-smali.wasm",
+    label: "Smali",
+  },
   markdown: {
     package: "markdown",
     wasm: "markdown.wasm",
@@ -74,6 +80,7 @@ const EXTENSION_MAP: Record<string, string> = {
   ".go": "go",
   ".rs": "rust",
   ".sol": "solidity",
+  ".smali": "smali",
   ".md": "markdown",
   ".markdown": "markdown",
 };
@@ -174,6 +181,8 @@ function extractSymbols(
       return extractRust(node, source, depth);
     case "solidity":
       return extractSolidity(node, source, depth);
+    case "smali":
+      return extractSmali(node, source, depth);
     case "markdown":
       return extractMarkdown(source);
     default:
@@ -1065,6 +1074,8 @@ function extractImports(
       return extractRustImports(node, source);
     case "solidity":
       return extractSolidityImports(node, source);
+    case "smali":
+      return extractSmaliImports(node, source);
     case "markdown":
       return extractMarkdownLinks(source);
     default:
@@ -1596,11 +1607,7 @@ function extractStringLiteral(node: Node, source: string): string | null {
   return match ? match[1] : text;
 }
 
-// ---- ImportInfo type (declared locally so manager.ts stays self-contained) ----
+// ---- Re-export ImportInfo for backward compatibility ----
 
-export interface ImportInfo {
-  source: string;
-  names: string[];
-  lineNumber: number;
-}
+export type { ImportInfo };
 
