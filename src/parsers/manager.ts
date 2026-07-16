@@ -9,6 +9,7 @@ import { createRequire } from "node:module";
 import { Parser, Language, type Node } from "web-tree-sitter";
 import type { SymbolInfo, ImportInfo } from "../types.js";
 import { extractSmali, extractSmaliImports } from "./smali.js";
+import { extractJava, extractJavaImports } from "./java.js";
 
 // ---- WASM path resolution ----
 
@@ -59,6 +60,11 @@ const GRAMMAR_REGISTRY: Record<
     wasm: "tree-sitter-smali.wasm",
     label: "Smali",
   },
+  java: {
+    package: "tree-sitter-java",
+    wasm: "tree-sitter-java.wasm",
+    label: "Java",
+  },
   markdown: {
     package: "markdown",
     wasm: "markdown.wasm",
@@ -81,6 +87,7 @@ const EXTENSION_MAP: Record<string, string> = {
   ".rs": "rust",
   ".sol": "solidity",
   ".smali": "smali",
+  ".java": "java",
   ".md": "markdown",
   ".markdown": "markdown",
 };
@@ -183,6 +190,8 @@ function extractSymbols(
       return extractSolidity(node, source, depth);
     case "smali":
       return extractSmali(node, source, depth);
+    case "java":
+      return extractJava(node, source, depth);
     case "markdown":
       return extractMarkdown(source);
     default:
@@ -1076,6 +1085,8 @@ function extractImports(
       return extractSolidityImports(node, source);
     case "smali":
       return extractSmaliImports(node, source);
+    case "java":
+      return extractJavaImports(node, source);
     case "markdown":
       return extractMarkdownLinks(source);
     default:

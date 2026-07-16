@@ -247,8 +247,8 @@ describe("extractFileImports — unsupported languages", () => {
   });
 
   it("returns empty array for unsupported file extension", async () => {
-    const code = 'import java.util.List;\n';
-    const filePath = join(tmpDir, "Main.java");
+    const code = '#include <stdio.h>\n';
+    const filePath = join(tmpDir, "main.c");
     writeFileSync(filePath, code, "utf-8");
 
     const imports = await extractFileImports(filePath, code);

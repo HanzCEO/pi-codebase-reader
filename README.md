@@ -46,6 +46,7 @@ read("large-file.ts", ranges: [{offset:100,limit:50}, {offset:300,limit:30}]) â†
 | Rust | `tree-sitter-rust` | functions, structs, enums, traits, impl blocks, macros |
 | Solidity | `tree-sitter-solidity` | contracts, interfaces, libraries, functions, modifiers, events, errors, structs, enums, constructors, fallback/receive |
 | Smali | `tree-sitter-smali` | classes, interfaces, enums, methods, fields, annotations |
+| Java | `tree-sitter-java` | classes, interfaces, enums, records, annotations, methods, constructors, fields, enum constants |
 
 ## Commands
 
