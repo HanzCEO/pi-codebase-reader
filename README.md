@@ -1,10 +1,10 @@
 # pi-codebase-reader
 
-A [pi](https://pi.dev) extension that implements the [Sweep blog post "Read File"](https://blog.sweep.dev/posts/read-file) approach — smart AST-based file outlining — and registers an **Explorer** subagent for `@tintinweb/pi-subagents`.
+A [pi](https://pi.dev) extension that builds on the [Sweep blog post "Read File"](https://blog.sweep.dev/posts/read-file) approach, using smart AST-based file outlining, and registers an **Explorer** subagent for `@tintinweb/pi-subagents`.
 
 ## How it works
 
-The extension overrides pi's built-in `read` tool with a smarter version:
+The extension takes pi's built-in `read` tool and makes it smarter about what a large file really holds before you spend tokens reading every line of it:
 
 | Input | Returns |
 |------|---------|
@@ -16,11 +16,11 @@ The extension overrides pi's built-in `read` tool with a smarter version:
 | Any file with `ranges` | Multiple non-contiguous sections in one call (auto-merged) |
 | Non-existent path | Fuzzy suggestions for similar paths (can be disabled in config) |
 
-The outline shows every structural symbol — classes, functions, methods, interfaces, enums, structs, traits, impl blocks — with their line ranges, nesting hierarchy, and **code previews** (first few lines of each symbol). This token-efficient format reduces total interaction cost by:
+The outline surfaces every structural symbol (classes, functions, methods, interfaces, enums, structs, traits, impl blocks) with its line range, its nesting depth, and a short code preview so you can recognize a symbol without reading the whole body. Reading this way costs less because the format does three things at once:
 
-- **Fewer tool calls**: Use `ranges` to read multiple sections in one call instead of separate reads
-- **Reduced drill-downs**: Code previews let you understand symbols without additional reads
-- **Smart merging**: Adjacent ranges are automatically merged to minimize output
+- **Fewer tool calls**: a single `ranges` call replaces several separate reads
+- **Fewer drill-downs**: a preview is often enough to know what a symbol means without opening it
+- **Less output overall**: adjacent ranges merge automatically before anything is sent back
 
 ### Token savings example
 
@@ -82,14 +82,14 @@ pi -e ./src/index.ts
 The Explorer subagent works with **either** subagent extension. Install one (or both):
 
 ```bash
-# Option A — @tintinweb/pi-subagents
+# Option A: @tintinweb/pi-subagents
 pi install npm:@tintinweb/pi-subagents
 
-# Option B — nicobailon/pi-subagents
+# Option B: nicobailon/pi-subagents
 pi install npm:pi-subagents
 ```
 
-Both libraries are supported simultaneously — the agent definition file is written in a format compatible with both. Use `/codebase-reader-subagent` to check which is detected.
+Both libraries can be installed at once. The agent definition file is written in a format both understand. Run `/codebase-reader-subagent` to see which one is detected.
 
 ## Configuration
 
@@ -153,20 +153,15 @@ subagent({
 
 The explorer subagent has tools `read`, `grep`, `find`, `bash`, `ls`, `repo_tree`, and `connected_tree` and is specialized for deep-dive code exploration.
 
-**Important**: The explorer agent is configured to use the dedicated `grep` tool directly (not via bash). This is more efficient because:
-- The `grep` tool returns structured results with file paths and line numbers
-- No shell overhead from spawning bash processes
-- Better token efficiency (structured output vs raw text)
-
-When you change the model via `/codebase-reader-model` or settings via `/codebase-reader-settings`, the explorer agent definition file is automatically updated so the subagent library picks up the changes on next reload.
+The explorer agent calls the dedicated `grep` tool directly rather than going through bash. That choice keeps the output structured: file paths and line numbers arrive already separated instead of buried in raw terminal text, and it removes the cost of spawning a shell for every search. When you change the model via `/codebase-reader-model` or settings via `/codebase-reader-settings`, the explorer agent definition file is rewritten automatically, so the subagent library picks the change up on next reload.
 
 ### Checking your subagent setup
 
-Use `/codebase-reader-subagent` (without arguments) to see which library is detected and active:
+Run `/codebase-reader-subagent` (without arguments) to see which library is detected and active.
 
 ### Explorer Agent Lifecycle
 
-The explorer agent file is automatically managed:
+The explorer agent file is managed for you, and you stay in control of it:
 
 | Event | Action |
 |-------|--------|
@@ -189,12 +184,14 @@ The explorer agent file is automatically managed:
 
 ## How Outlining Works
 
+Here is the full cycle from call to sections, so you can see what a real exchange looks like:
+
 1. Agent calls `read("large-file.ts")`
 2. Extension parses the file with tree-sitter AST
 3. Returns an outline with code previews and line ranges:
 
 ```
-server.ts (TypeScript) — 2855 lines, ~22.8K tokens
+server.ts (TypeScript) 2855 lines, ~22.8K tokens
 ├── class App (5 children) [1:850]
 │   ├── constructor(config) (3 children) [15:250]
 │   │   ```
@@ -239,36 +236,37 @@ Use read with offset/limit to view specific sections, or ranges for multiple sec
 
 ## Similar Path Suggestions
 
-When a requested file is not found, the extension uses recursive fuzzy matching to suggest similar paths. For example, `read("src/comands.ts")` might suggest `src/commands.ts` and `src/config.ts`. This feature can be disabled by setting `general.suggest_similar = false` in the configuration.
+When a requested file is not found, the extension falls back on recursive fuzzy matching to suggest what you probably meant. `read("src/comands.ts")`, for instance, might come back with `src/commands.ts` and `src/config.ts` so a typo costs a glance rather than a hunt. Set `general.suggest_similar = false` in the configuration to turn this off.
 
 ## Performance Optimization
 
-The Explorer subagent is optimized for efficiency:
+The Explorer subagent is built to spend as little as possible per call:
 
 ### Tool Usage
-- **Uses `grep` tool directly** (not via bash) for pattern matching
-- **Uses `repo_tree`** for repository overview instead of multiple `ls` calls
-- **Uses `connected_tree`** for import analysis instead of manual tracing
+- Calls the `grep` tool directly (not via bash) for pattern matching
+- Uses `repo_tree` for a repository overview instead of several `ls` calls
+- Uses `connected_tree` for import analysis instead of tracing imports by hand
 
-### Why This Matters
+### Why This Costs Less
 
-Without optimization, agents often use `bash` to run `grep` commands:
+Agents that skip this setup often reach for bash to run grep by hand:
 ```bash
-# Inefficient: bash overhead + unstructured output
+# Bash overhead + unstructured output
 grep -rn "func.*Create" core/vm/
 ```
 
-With the optimized explorer agent:
+The optimized explorer agent, by contrast, hands the work to a dedicated tool:
 ```python
-# Efficient: dedicated tool + structured results
+# Dedicated tool + structured results
 grep(pattern: "func.*Create", path: "core/vm")
 ```
 
-**Benefits:**
+The result is a tool surface that does the same work with less friction:
+
 - 30-40% fewer tool calls
 - 20-30% token savings
-- Structured output for better reasoning
-- No shell process overhead
+- Structered output the model reasons over directly
+- No shell process spawned for each search
 
 ## Model Selection TUI
 
