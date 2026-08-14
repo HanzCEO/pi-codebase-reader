@@ -6,10 +6,13 @@
  */
 
 import { createRequire } from "node:module";
+import { fileURLToPath } from "node:url";
 import { Parser, Language, type Node } from "web-tree-sitter";
 import type { SymbolInfo, ImportInfo } from "../types.js";
 import { extractSmali, extractSmaliImports } from "./smali.js";
 import { extractJava, extractJavaImports } from "./java.js";
+import { extractScss, extractScssImports } from "./scss.js";
+import { extractSass, extractSassImports } from "./sass.js";
 
 // ---- WASM path resolution ----
 
@@ -18,7 +21,7 @@ const _require = createRequire(import.meta.url);
 /** Known language grammars with their npm package + WASM file name. */
 const GRAMMAR_REGISTRY: Record<
   string,
-  { package: string; wasm: string; label: string }
+  { package: string; wasm: string; label: string; localWasm?: boolean }
 > = {
   javascript: {
     package: "tree-sitter-javascript",
@@ -60,6 +63,22 @@ const GRAMMAR_REGISTRY: Record<
     wasm: "tree-sitter-smali.wasm",
     label: "Smali",
   },
+  scss: {
+    package: "tree-sitter-scss",
+    wasm: "tree-sitter-scss.wasm",
+    label: "SCSS",
+    // The npm package ships no prebuilt WASM; the repo vendors the compiled
+    // module under src/parsers/vendor/ and resolves it via a local path.
+    localWasm: true,
+  },
+  sass: {
+    package: "tree-sitter-sass",
+    wasm: "tree-sitter-sass.wasm",
+    label: "Sass",
+    // The indented-syntax grammar (bajrangCoder/tree-sitter-sass) is not on
+    // npm and ships no prebuilt WASM; vendored under src/parsers/vendor/.
+    localWasm: true,
+  },
   java: {
     package: "tree-sitter-java",
     wasm: "tree-sitter-java.wasm",
@@ -88,6 +107,8 @@ const EXTENSION_MAP: Record<string, string> = {
   ".sol": "solidity",
   ".smali": "smali",
   ".java": "java",
+  ".scss": "scss",
+  ".sass": "sass",
   ".md": "markdown",
   ".markdown": "markdown",
 };
@@ -115,13 +136,22 @@ async function loadLanguage(key: string): Promise<Language> {
   if (!entry) throw new Error(`Unknown grammar: ${key}`);
 
   let wasmPath: string;
-  try {
-    wasmPath = _require.resolve(`${entry.package}/${entry.wasm}`);
-  } catch {
-    throw new Error(
-      `Cannot resolve WASM for "${entry.label}": ${entry.package}/${entry.wasm} not found. ` +
-        `Is ${entry.package} installed?`,
+  if (entry.localWasm) {
+    // Vendored grammar: src/ ships with the published package, so resolving
+    // ../../src/parsers/vendor from this module works in dev (src/) and in the
+    // built package (dist/).
+    wasmPath = fileURLToPath(
+      new URL("../../src/parsers/vendor/" + entry.wasm, import.meta.url),
     );
+  } else {
+    try {
+      wasmPath = _require.resolve(`${entry.package}/${entry.wasm}`);
+    } catch {
+      throw new Error(
+        `Cannot resolve WASM for "${entry.label}": ${entry.package}/${entry.wasm} not found. ` +
+          `Is ${entry.package} installed?`,
+      );
+    }
   }
 
   const lang = await Language.load(wasmPath);
@@ -190,6 +220,10 @@ function extractSymbols(
       return extractSolidity(node, source, depth);
     case "smali":
       return extractSmali(node, source, depth);
+    case "scss":
+      return extractScss(node, source, depth);
+    case "sass":
+      return extractSass(node, source, depth);
     case "java":
       return extractJava(node, source, depth);
     case "markdown":
@@ -1085,6 +1119,10 @@ function extractImports(
       return extractSolidityImports(node, source);
     case "smali":
       return extractSmaliImports(node, source);
+    case "scss":
+      return extractScssImports(node, source);
+    case "sass":
+      return extractSassImports(node, source);
     case "java":
       return extractJavaImports(node, source);
     case "markdown":

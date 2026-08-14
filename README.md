@@ -47,6 +47,12 @@ read("large-file.ts", ranges: [{offset:100,limit:50}, {offset:300,limit:30}]) â†
 | Solidity | `tree-sitter-solidity` | contracts, interfaces, libraries, functions, modifiers, events, errors, structs, enums, constructors, fallback/receive |
 | Smali | `tree-sitter-smali` | classes, interfaces, enums, methods, fields, annotations |
 | Java | `tree-sitter-java` | classes, interfaces, enums, records, annotations, methods, constructors, fields, enum constants |
+| SCSS | `tree-sitter-scss` | rulesets, placeholders, variables, mixins, functions, @use/@forward/@import, extends |
+| Sass (indented) | `tree-sitter-sass` | rulesets, placeholders, variables, mixins, functions, @use/@forward/@import, extends |
+
+The SCSS grammar covers the bracket syntax (`.scss`). The indented `.sass` dialect
+is handled by a separate vendored grammar; both are compiled to WASM and shipped
+under `src/parsers/vendor/`.
 
 ## Commands
 

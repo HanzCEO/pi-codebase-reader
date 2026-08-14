@@ -73,6 +73,22 @@ describe("detectLanguage", () => {
     assert.equal(detectLanguage("Main.java"), "java");
   });
 
+  it("detects SCSS for .scss files", () => {
+    assert.equal(detectLanguage("styles.scss"), "scss");
+  });
+
+  it("detects Sass for .sass files", () => {
+    assert.equal(detectLanguage("theme.sass"), "sass");
+  });
+
+  it("detects SCSS case-insensitively", () => {
+    assert.equal(detectLanguage("Styles.SCSS"), "scss");
+  });
+
+  it("detects Sass case-insensitively", () => {
+    assert.equal(detectLanguage("Theme.Sass"), "sass");
+  });
+
   // ── Case insensitivity ────────────────────────────────────────────
 
   it("detects case-insensitively for uppercase extensions", () => {
@@ -82,6 +98,8 @@ describe("detectLanguage", () => {
     assert.equal(detectLanguage("Lib.RS"), "rust");
     assert.equal(detectLanguage("Contract.SOL"), "solidity");
     assert.equal(detectLanguage("Main.JAVA"), "java");
+    assert.equal(detectLanguage("Styles.SCSS"), "scss");
+    assert.equal(detectLanguage("Theme.SASS"), "sass");
   });
 
   it("detects case-insensitively for mixed-case extensions", () => {
@@ -199,6 +217,14 @@ describe("languageLabel", () => {
 
   it("returns 'Java' for 'java' key", () => {
     assert.equal(languageLabel("java"), "Java");
+  });
+
+  it("returns 'SCSS' for 'scss' key", () => {
+    assert.equal(languageLabel("scss"), "SCSS");
+  });
+
+  it("returns 'Sass' for 'sass' key", () => {
+    assert.equal(languageLabel("sass"), "Sass");
   });
 
   it("returns the key itself for unknown keys", () => {

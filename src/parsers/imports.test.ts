@@ -232,6 +232,96 @@ describe("extractFileImports — Solidity", () => {
 });
 
 // ========================================================================
+// SCSS imports
+// ========================================================================
+
+describe("extractFileImports — SCSS", () => {
+  let tmpDir: string;
+
+  before(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "import-scss-"));
+  });
+
+  after(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("extracts @use, @forward, and @import statements", async () => {
+    const code = [
+      '@use "buttons";',
+      '@use "sass:math" as math;',
+      '@forward "config";',
+      '@import "theme";',
+      "",
+      "$primary: #333;",
+      ".btn { color: $primary; }",
+    ].join("\n");
+    const filePath = join(tmpDir, "styles.scss");
+    writeFileSync(filePath, code, "utf-8");
+
+    const imports = await extractFileImports(filePath, code);
+    const sources = imports.map((i) => i.source);
+
+    assert.ok(
+      sources.includes("buttons"),
+      `expected @use buttons, got: ${sources.join(", ")}`,
+    );
+    assert.ok(
+      sources.includes("sass:math"),
+      `expected @use sass:math (alias case), got: ${sources.join(", ")}`,
+    );
+    assert.ok(
+      sources.includes("config"),
+      `expected @forward config, got: ${sources.join(", ")}`,
+    );
+    assert.ok(
+      sources.includes("theme"),
+      `expected @import theme, got: ${sources.join(", ")}`,
+    );
+  });
+
+  it("extracts .sass files with the indented-syntax grammar", async () => {
+    const code = [
+      '@use "_variables"',
+      "",
+      "$color: blue",
+      "",
+      ".foo",
+      "  color: $color",
+    ].join("\n");
+    const filePath = join(tmpDir, "index.sass");
+    // .sass uses indentation syntax (no braces/semicolons); the dedicated
+    // indented-syntax grammar handles the @use directive.
+    writeFileSync(filePath, code, "utf-8");
+
+    const imports = await extractFileImports(filePath, code);
+    const sources = imports.map((i) => i.source);
+    assert.ok(
+      sources.includes("_variables"),
+      `expected @use _variables, got: ${sources.join(", ")}`,
+    );
+  });
+
+  it("reports line numbers of import statements", async () => {
+    const code = [
+      "// comment",
+      '@use "grid";',
+      '@import "reset";',
+    ].join("\n");
+    const filePath = join(tmpDir, "lines.scss");
+    writeFileSync(filePath, code, "utf-8");
+
+    const imports = await extractFileImports(filePath, code);
+    const grid = imports.find((i) => i.source === "grid");
+    assert.ok(grid, "@use grid missing");
+    assert.equal(grid!.lineNumber, 2);
+    const reset = imports.find((i) => i.source === "reset");
+    assert.ok(reset, "@import reset missing");
+    assert.equal(reset!.lineNumber, 3);
+  });
+});
+
+// ========================================================================
 // Unsupported languages
 // ========================================================================
 
