@@ -1,7 +1,7 @@
 {
   "name": "pi-codebase-reader",
-  "version": "0.6.3",
-  "description": "Smart codebase reader for pi \u2014 AST-based file outlines + explorer subagent for @tintinweb/pi-subagents or nicobailon/pi-subagents",
+  "version": "0.7.0",
+  "description": "Smart codebase reader for pi — AST-based file outlines + explorer subagent for @tintinweb/pi-subagents or nicobailon/pi-subagents",
   "homepage": "https://github.com/HanzCEO/pi-codebase-reader#readme",
   "bugs": {
     "url": "https://github.com/HanzCEO/pi-codebase-reader/issues"
