@@ -1,0 +1,8 @@
+{
+  "maxIterations": 30,
+  "name": "dist-size",
+  "metricName": "my_primary_size",
+  "metricUnit": "kB",
+  "direction": "lower",
+  "aim": "Reduce packed npm tarball size of pi-codebase-reader without breaking parsing."
+}
