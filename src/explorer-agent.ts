@@ -27,10 +27,14 @@ import type { ExplorerAgentConfig } from "./types.js";
 const SUBAGENTS_MANAGER_KEY = Symbol.for("pi-subagents:manager");
 
 /**
- * nicobailon/pi-subagents sets a runtime cleanup function on globalThis
- * during its extension initialization.
+ * nicobailon/pi-subagents stores its runtime registry on globalThis during
+ * extension initialization. The registry is an object keyed by session
+ * manager (WeakMap) with an active-entries Set.
+ *
+ * Note: older versions of the library exposed a plain cleanup function under
+ * `__piSubagentRuntimeCleanup`; that key was removed in 0.52.0.
  */
-const NICOBALLON_RUNTIME_KEY = "__piSubagentRuntimeCleanup";
+const NICOBALLON_RUNTIME_KEY = "__piSubagentRuntimeRegistry";
 
 // ── Agent file template ─────────────────────────────────────────────────
 
@@ -215,10 +219,20 @@ export function isTintinwebSubagentsAvailable(): boolean {
 
 /**
  * Check if nicobailon/pi-subagents is loaded by probing its runtime
- * cleanup function stored on globalThis.
+ * registry stored on globalThis.
+ *
+ * The registry is an object with a `bySessionManager` WeakMap and an
+ * `activeEntries` Set. We validate the shape so a stale or partial value
+ * from an older reload does not produce a false positive.
  */
 export function isNicobailonSubagentsAvailable(): boolean {
-  return typeof (globalThis as any)[NICOBALLON_RUNTIME_KEY] === "function";
+  const registry = (globalThis as any)[NICOBALLON_RUNTIME_KEY];
+  return (
+    typeof registry === "object" &&
+    registry !== null &&
+    registry.bySessionManager instanceof WeakMap &&
+    registry.activeEntries instanceof Set
+  );
 }
 
 /**

@@ -281,7 +281,7 @@ The `/codebase-reader-model` command opens a fully interactive terminal UI that:
 The extension hooks into pi's session lifecycle:
 - **`session_start`**: Reloads configuration and re-registers the Explorer agent for each new session
 - **`subagents:ready`**: Listens for the `@tintinweb/pi-subagents` readiness signal to confirm the Explorer agent is available
-- **Auto-detection**: Both `@tintinweb/pi-subagents` (via Symbol) and `pi-subagents` (via globalThis runtime key) are detected automatically on session start
+- **Auto-detection**: Both `@tintinweb/pi-subagents` (via Symbol) and `pi-subagents` (via globalThis runtime registry) are detected automatically on session start
 
 ## Continuous Integration
 

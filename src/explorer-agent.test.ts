@@ -210,48 +210,61 @@ describe("explorer-agent", () => {
   // ── isNicobailonSubagentsAvailable ─────────────────────────────────
 
   describe("isNicobailonSubagentsAvailable", () => {
-    it("returns false when the runtime key is not set", () => {
-      const key = "__piSubagentRuntimeCleanup";
-      const previous = (globalThis as any)[key];
-      delete (globalThis as any)[key];
+    const registryKey = "__piSubagentRuntimeRegistry";
+
+    it("returns false when the runtime registry is not set", () => {
+      const previous = (globalThis as any)[registryKey];
+      delete (globalThis as any)[registryKey];
 
       const result = isNicobailonSubagentsAvailable();
       assert.equal(result, false, "should be false when key is absent");
 
       // Restore
-      (globalThis as any)[key] = previous;
+      (globalThis as any)[registryKey] = previous;
     });
 
-    it("returns false when the runtime key is set to a non-function", () => {
-      const key = "__piSubagentRuntimeCleanup";
-
-      (globalThis as any)[key] = { version: "1.0.0" };
+    it("returns false when the runtime registry is set to a non-registry object", () => {
+      (globalThis as any)[registryKey] = { version: "1.0.0" };
 
       const result = isNicobailonSubagentsAvailable();
-      assert.equal(result, false, "should be false when key is not a function");
+      assert.equal(result, false, "should be false when key is not a registry");
 
-      delete (globalThis as any)[key];
+      delete (globalThis as any)[registryKey];
     });
 
-    it("returns true when the runtime key is set to a function", () => {
-      const key = "__piSubagentRuntimeCleanup";
-
-      (globalThis as any)[key] = () => {};
+    it("returns false when the runtime registry is set to a plain function (old format)", () => {
+      (globalThis as any)[registryKey] = () => {};
 
       const result = isNicobailonSubagentsAvailable();
-      assert.equal(result, true, "should be true when key is a function");
+      assert.equal(result, false, "should be false when key is a function");
 
-      delete (globalThis as any)[key];
+      delete (globalThis as any)[registryKey];
+    });
+
+    it("returns true when the runtime registry has the expected shape", () => {
+      (globalThis as any)[registryKey] = {
+        bySessionManager: new WeakMap(),
+        activeEntries: new Set(),
+      };
+
+      const result = isNicobailonSubagentsAvailable();
+      assert.equal(result, true, "should be true when registry is present");
+
+      delete (globalThis as any)[registryKey];
     });
   });
 
   // ── detectSubagentLibrary ──────────────────────────────────────────
 
   describe("detectSubagentLibrary", () => {
-    it("returns '@tintinweb/pi-subagents' when tintinweb symbol is set", () => {
-      const symbolKey = Symbol.for("pi-subagents:manager");
-      const nicobailonKey = "__piSubagentRuntimeCleanup";
+    const symbolKey = Symbol.for("pi-subagents:manager");
+    const nicobailonKey = "__piSubagentRuntimeRegistry";
+    const nicoRegistry = () => ({
+      bySessionManager: new WeakMap(),
+      activeEntries: new Set(),
+    });
 
+    it("returns '@tintinweb/pi-subagents' when tintinweb symbol is set", () => {
       // Set tintinweb, clear nicobailon
       (globalThis as any)[symbolKey] = { version: "1.0.0" };
       const prevNico = (globalThis as any)[nicobailonKey];
@@ -264,14 +277,11 @@ describe("explorer-agent", () => {
       (globalThis as any)[nicobailonKey] = prevNico;
     });
 
-    it("returns 'pi-subagents' when nicobailon runtime key is a function", () => {
-      const symbolKey = Symbol.for("pi-subagents:manager");
-      const nicobailonKey = "__piSubagentRuntimeCleanup";
-
+    it("returns 'pi-subagents' when nicobailon runtime registry is present", () => {
       // Clear tintinweb, set nicobailon
       const prevSym = (globalThis as any)[symbolKey];
       delete (globalThis as any)[symbolKey];
-      (globalThis as any)[nicobailonKey] = () => {};
+      (globalThis as any)[nicobailonKey] = nicoRegistry();
 
       const result = detectSubagentLibrary();
       assert.equal(result, "pi-subagents");
@@ -281,9 +291,6 @@ describe("explorer-agent", () => {
     });
 
     it("returns null when neither library is detected", () => {
-      const symbolKey = Symbol.for("pi-subagents:manager");
-      const nicobailonKey = "__piSubagentRuntimeCleanup";
-
       const prevSym = (globalThis as any)[symbolKey];
       const prevNico = (globalThis as any)[nicobailonKey];
       delete (globalThis as any)[symbolKey];
@@ -297,11 +304,8 @@ describe("explorer-agent", () => {
     });
 
     it("prioritizes tintinweb over nicobailon when both are detected", () => {
-      const symbolKey = Symbol.for("pi-subagents:manager");
-      const nicobailonKey = "__piSubagentRuntimeCleanup";
-
       (globalThis as any)[symbolKey] = { version: "1.0.0" };
-      (globalThis as any)[nicobailonKey] = () => {};
+      (globalThis as any)[nicobailonKey] = nicoRegistry();
 
       const result = detectSubagentLibrary();
       assert.equal(result, "@tintinweb/pi-subagents",
